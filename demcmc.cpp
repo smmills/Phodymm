@@ -1,4 +1,4 @@
-#define demcmc_compile 3
+#define demcmc_compile 0
 
 // To compile lcout:
 // make sure demcmc_compile is defined as 0
@@ -4319,375 +4319,6 @@ double ***dsetup2 (double *p, const int npl){
 }
 
 
-// Compute Orbital xyzvxvyvz array from inputted orbital elements array
-double ***dsetup (double **p, const int npl){
-  const int sofd = SOFD;
-  const int sofds = SOFDS; 
- 
-  int pperplan = PPERPLAN;
-  int pstar = PSTAR;
-
-  //double ms = MS;
-  double epoch = EPOCH;
-
-  double brightstar=0;
-  double bsum=0;
-  int i;
-  if (MULTISTAR) {
-    for (i=0; i<npl; i++) bsum+=p[i][8];
-    brightstar=1.0-bsum;
-    if (brightstar <= 0.) {
-      printf("Central star has zero or negative brightness. Input must be incorrect\n");
-      exit(0);
-    }
-  }
-
-  double ms = p[npl][0];
-  double rstar = p[npl][1];
-  double c1 = p[npl][2];
-  double c2 = p[npl][3];
-  double dilute = p[npl][4];
-
-  double bigg = 1.0e0; //Newton's constant
-  double ghere = G; //2.9591220363e-4; 
-  double jos = 1.0/MSOMJ;  //9.545e-4; //M_jup/M_sol
-
-  double *mp = malloc(npl*sofd);
-  double *mpjup = malloc(npl*sofd);
-  double *msys = malloc((npl+1)*sofd);
-  msys[0] = ms;  
-
-  double *a = malloc(npl*sofd);
-  double *e = malloc(npl*sofd);
-  double *inc = malloc(npl*sofd);
-  double *bo = malloc(npl*sofd); 
-  double *lo = malloc(npl*sofd);
-  double *lambda = malloc(npl*sofd);
-  double *f = malloc(npl*sofd);   
-
- 
-  for (i=0;i<npl; i++) {
-    if (SQRTE) {
-      e[i] = pow( sqrt(pow(p[i][2],2)+pow(p[i][3],2)), 2 );
-    } else {
-      e[i] = sqrt(pow(p[i][2],2)+pow(p[i][3],2));
-    }
-    inc[i] = p[i][4]*M_PI/180;
-    bo[i] = p[i][5]*M_PI/180;
-    lo[i] = atan2(p[i][3],p[i][2]);
-    mp[i]= p[i][6];
- 
-    mpjup[i] = mp[i]*jos;       //          ; M_Jup
-    msys[i+1] = msys[i]+mpjup[i];
-    a[i] = cbrt(ghere*(msys[i+1])) * pow(cbrt(p[i][0]),2) * pow(cbrt(2*M_PI),-2);
-
-    double pomega = bo[i]+lo[i];
-    double lambda0 = getlambda( (M_PI/2-lo[i]), e[i], pomega);
-    double m0 = lambda0-pomega;
-    double me = m0 + 2*M_PI*(epoch - p[i][1])/p[i][0]; 
-    double mepomega = me+pomega;
-    double *lambdaepoint = pushpi(&mepomega,1);
-    double lambdae = lambdaepoint[0];
-    f[i] = getf(lambdae, e[i], pomega);
-
-  }
-
-  double **state = malloc(npl*sofds);
-  for (i=0; i<npl;i++) {
-    state[i] = keptostate(a[i],e[i],inc[i],lo[i],bo[i],f[i],(ghere*msys[i+1]));
-    int j;
-    for (j=0; j<6; j++) {
-      state[i][j] = -state[i][j];
-    }
-  }
-
-  // jacobian
-  double *sum;
-  if (XYZFLAG==1) {
-    sum=calloc(6,sofd);
-    if(XYZLIST[0]) {
-      int j;
-      for (j=0; j<6; j++) state[0][j] = p[0][j];
-    }
-    free(sum);
-  }
-
-#if (demcmc_compile == 0) 
-
-  if (CONVERT) {
-    char outfile2str[80];
-    strcpy(outfile2str, "xyz_out_");
-    strcat(outfile2str, OUTSTR);
-    strcat(outfile2str, ".pldin");
-    FILE *outfile2 = fopen(outfile2str, "a");
-    fprintf(outfile2, "planet                 x                        y                      z                      v_x                   v_y                   v_z                       m                      rpors             ");
-    if (MULTISTAR) {
-      fprintf(outfile2, "brightness               c1                    c2\n");
-    } else {
-      fprintf(outfile2, "\n");
-    }
-    double pnum = 0.1;
-    for (i=0; i<NPL; i++) {
-      fprintf(outfile2, "%1.1lf", pnum);
-      int j;
-      for (j=0; j<6; j++) {
-        fprintf(outfile2, "\t%.15lf", state[i][j]);
-      }
-      fprintf(outfile2, "\t%.15lf", mpjup[i]/jos);
-      fprintf(outfile2, "\t%.15lf", p[i][7]);
-      if (MULTISTAR) {
-        for (j=8; j<11; j++) {
-          fprintf(outfile2, "\t%.15lf", p[i][j]);
-        }
-      }
-
-      fprintf(outfile2, "\n");
-      pnum+=0.1;
-    }
-    fprintf(outfile2, "%.15lf ; mstar\n", ms);
-    fprintf(outfile2, "%.15lf ; rstar\n", rstar);
-    fprintf(outfile2, "%.15lf ; c1\n", c1);
-    fprintf(outfile2, "%.15lf ; c2\n", c2);
-    fprintf(outfile2, "%.15lf ; dilute\n", dilute);
-    fprintf(outfile2, " ; These coordinates are Jacobian \n");
-
-    fclose(outfile2);
-  }
-
-#endif
-
-
-  double **statenew = malloc(npl*sofds);
-  for (i=0; i<npl; i++) {
-    statenew[i] = malloc(6*sofd);
-  }
-
-  memcpy(statenew[0], state[0], 6*sofd);
-  int j;
-  sum = calloc(6,sofd);
-  for (i=1; i<npl; i++){
-    int j;
-    for (j=0; j<6; j++) {
-      sum[j] += state[i-1][j]*mpjup[i-1]/msys[i];
-      statenew[i][j] = state[i][j]+sum[j];
-    }
-  }
-  free(sum);
-
-
-  //barycentric
-  if (XYZFLAG==3) {
-    //printf("barycentric coordinate input is broken at the moment. try using stellar centric instead.\n");
-    //exit(0);
-    double *starpos = calloc(6,sofd);
-    int j;
-    for (j=0; j<6; j++) {
-      for (i=0; i<npl; i++) {
-        if (XYZLIST[i]) {
-          starpos[j] -= p[i][j]*mpjup[i];
-        } else {
-          starpos[j] -= state[i][j]*mpjup[i];
-        }
-      }
-      starpos[j] /= ms;
-    }
-    for (i=0; i<npl; i++) {
-      if (XYZLIST[i]) {
-        int j;
-        for (j=0; j<6; j++) {
-          statenew[i][j] = p[i][j]-starpos[j];
-        }
-      }
-    }
-    free(starpos);
-  }
-
-  //stellarcentric
-  if (XYZFLAG==2) {
-    for (i=0; i<npl; i++) {
-      if (XYZLIST[i]) {
-        int j;
-        for (j=0; j<6; j++) {
-          statenew[i][j] = p[i][j];
-        }
-      }
-    }
-  }
-
-
-#if (demcmc_compile == 0) 
-  if (CONVERT) {
-    char outfile2str[80];
-    strcpy(outfile2str, "xyz_out_");
-    strcat(outfile2str, OUTSTR);
-    strcat(outfile2str, ".pldin");
-    FILE *outfile2 = fopen(outfile2str, "a");
-    fprintf(outfile2, "planet                 x                        y                      z                      v_x                   v_y                   v_z                       m                      rpors             ");
-    if (MULTISTAR) {
-      fprintf(outfile2, "brightness               c1                    c2\n");
-    } else {
-      fprintf(outfile2, "\n");
-    }
-    double pnum = 0.1;
-    for (i=0; i<NPL; i++) {
-      fprintf(outfile2, "%1.1lf", pnum);
-      int j;
-      for (j=0; j<6; j++) {
-        fprintf(outfile2, "\t%.15lf", statenew[i][j]);
-      }
-      fprintf(outfile2, "\t%.15lf", mpjup[i]/jos);
-      fprintf(outfile2, "\t%.15lf", p[i][7]);
-      if (MULTISTAR) {
-        for (j=8; j<11; j++) {
-          fprintf(outfile2, "\t%.15lf", p[i][j]);
-        }
-      }
-
-      fprintf(outfile2, "\n");
-      pnum+=0.1;
-    }
-    fprintf(outfile2, "%.15lf ; mstar\n", ms);
-    fprintf(outfile2, "%.15lf ; rstar\n", rstar);
-    fprintf(outfile2, "%.15lf ; c1\n", c1);
-    fprintf(outfile2, "%.15lf ; c2\n", c2);
-    fprintf(outfile2, "%.15lf ; dilute\n", dilute);
-    fprintf(outfile2, " ; These coordinates are stellar centric\n");
-
-    fclose(outfile2);
-  }
-  if (CONVERT) {
-
-    double *bary = calloc(6,sofd);
-    int j;
-    for (j=0; j<6; j++) {
-      double mtot=ms;
-      for (i=0; i<npl; i++) {
-        if (XYZLIST[i]) {
-          bary[j] += p[i][j]*mpjup[i];
-        } else {
-          bary[j] += statenew[i][j]*mpjup[i];
-        }
-        mtot+=mpjup[i];
-      }
-      bary[j] /= mtot;
-    }
-
-
-    char outfile2str[80];
-    strcpy(outfile2str, "xyz_out_");
-    strcat(outfile2str, OUTSTR);
-    strcat(outfile2str, ".pldin");
-    FILE *outfile2 = fopen(outfile2str, "a");
-    fprintf(outfile2, "planet                 x                        y                      z                      v_x                   v_y                   v_z                       m                      rpors             ");
-    if (MULTISTAR) {
-      fprintf(outfile2, "brightness               c1                    c2\n");
-    } else {
-      fprintf(outfile2, "\n");
-    }
-    double pnum = 0.0;
-
-    fprintf(outfile2, "%1.1lf", pnum);
-    for (j=0; j<6; j++) {
-      fprintf(outfile2, "\t%.15lf", -bary[j]);
-    }
-    fprintf(outfile2, "\t%.15lf", ms/jos);
-    fprintf(outfile2, "\t%.15lf", 1.0);
-    fprintf(outfile2, "\t%.15lf", brightstar);
-    fprintf(outfile2, "\t%.15lf", c1);
-    fprintf(outfile2, "\t%.15lf\n", c2);
-
-    pnum+=0.1;
-    for (i=0; i<NPL; i++) {
-      fprintf(outfile2, "%1.1lf", pnum);
-      int j;
-      for (j=0; j<6; j++) {
-        fprintf(outfile2, "\t%.15lf", statenew[i][j]-bary[j]);
-      }
-      fprintf(outfile2, "\t%.15lf", mpjup[i]/jos);
-      fprintf(outfile2, "\t%.15lf", p[i][7]);
-      if (MULTISTAR) {
-        for (j=8; j<11; j++) {
-          fprintf(outfile2, "\t%.15lf", p[i][j]);
-        }
-      }
-
-      fprintf(outfile2, "\n");
-      pnum+=0.1;
-    }
-    fprintf(outfile2, "%.15lf ; mstar\n", ms);
-    fprintf(outfile2, "%.15lf ; rstar\n", rstar);
-    fprintf(outfile2, "%.15lf ; c1\n", c1);
-    fprintf(outfile2, "%.15lf ; c2\n", c2);
-    fprintf(outfile2, "%.15lf ; dilute\n", dilute);
-    fprintf(outfile2, " ; These coordinates are barycentric\n");
-
-    free(bary);
-    fclose(outfile2);
-  }
-#endif
-
-  double ***integration_in = malloc(4*sizeof(double**));
-  integration_in[0] = malloc(sofds);
-  integration_in[0][0] = malloc(sofd);
-  integration_in[0][0][0] = npl+1;
-  integration_in[1] = malloc(sofds);
-  integration_in[1][0] = malloc(sofd);
-  integration_in[1][0][0] = epoch;
-  integration_in[2] = malloc((npl+1)*sofds);
-  for (i=0; i<npl+1; i++) {
-    integration_in[2][i] = malloc(pperplan*sofd);
-  }
-  integration_in[2][0][0] = bigg*ms;
-  integration_in[2][0][1] = 0.;
-  integration_in[2][0][2] = 0.;
-  integration_in[2][0][3] = 0.;
-  integration_in[2][0][4] = 0.;
-  integration_in[2][0][5] = 0.;
-  integration_in[2][0][6] = 0.;
-  integration_in[2][0][7] = 1.;
-  if (MULTISTAR) {
-    integration_in[2][0][8] = brightstar;
-    integration_in[2][0][9] = c1;
-    integration_in[2][0][10] = c2;
-  }
-  for (i=0; i<npl; i++) {
-    integration_in[2][i+1][0] = bigg*mpjup[i];
-    int j;
-    for (j=0; j<6; j++) {
-      integration_in[2][i+1][j+1] = statenew[i][j];
-    }
-    integration_in[2][i+1][7] = p[i][7]; 
-    if (MULTISTAR) {
-      for (j=8; j<11; j++) {
-        integration_in[2][i+1][j] = p[i][j];
-      }
-    }
-  }
-  integration_in[3] = malloc(sofds);
-  if (!MULTISTAR) {
-    integration_in[3][0] = malloc(4*sofd);
-  } else {
-    integration_in[3][0] = malloc(2*sofd);
-  }
-  integration_in[3][0][0] = rstar;
-  if (!MULTISTAR) {
-    integration_in[3][0][1] = c1;
-    integration_in[3][0][2] = c2;
-    integration_in[3][0][3] = dilute;
-  } else {
-    integration_in[3][0][1] = dilute;
-  }
-
-  free(mp);free(mpjup);free(msys);free(a);free(e);free(inc);free(bo);free(lo);free(lambda);free(f);
-  for (i=0; i<npl; i++) {
-    free(state[i]);free(statenew[i]);
-  }
-  free(state);free(statenew);
-
-  return integration_in;
-
-}
-
 
 
 // Computes (observation - theory)/error for a [time, obs, theory, err] vector
@@ -5590,15 +5221,11 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
   }
 
   FILE *sout;
-  double **p = malloc((nbodies)*sofds);  
+  double *p = malloc((npl*pperplan + pstar)*sofd);  
 
   if (!RESTART) {
  
     int i;
-    for (i=0; i<npl; i++) {
-      p[i] = malloc(pperplan*sofd); 
-    }
-    p[npl] = malloc(pstar*sofd);
     double *planet1 = malloc(npl*sofd);
     double *period1 = malloc(npl*sofd);
     double *t01 = malloc(npl*sofd);
@@ -5644,38 +5271,38 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
     for (i=0; i<npl; i++) {
       fscanf(aeifile,"%lf %lf %lf %lf %lf %lf %lf %lf %lf", &planet1[i], &period1[i], &t01[i], &e1[i], &inc1[i], &bo1[i], &lo1[i], &mp1[i], &rpors1[i]);
       printf("%lf\n", period1[i]);
-      p[i][0] = period1[i];
-      p[i][1] = t01[i];
+      p[i*pperplan+0] = period1[i];
+      p[i*pperplan+1] = t01[i];
       if (XYZFLAG==4 || XYZFLAG==5 || XYZFLAG==6) {
-        p[i][2] = e1[i];
-        p[i][3] = inc1[i];
-        p[i][4] = bo1[i];
-        p[i][5] = lo1[i];
+        p[i*pperplan+2] = e1[i];
+        p[i*pperplan+3] = inc1[i];
+        p[i*pperplan+4] = bo1[i];
+        p[i*pperplan+5] = lo1[i];
       } else {
         if (XYZLIST[i]) {
-          p[i][2] = e1[i];
-          p[i][3] = inc1[i];
-          p[i][4] = bo1[i];
-          p[i][5] = lo1[i];
+          p[i*pperplan+2] = e1[i];
+          p[i*pperplan+3] = inc1[i];
+          p[i*pperplan+4] = bo1[i];
+          p[i*pperplan+5] = lo1[i];
         } else {
           if (SQRTE) {
-            p[i][2] = sqrt(e1[i]) * cos(lo1[i]*M_PI/180);
-            p[i][3] = sqrt(e1[i]) * sin(lo1[i]*M_PI/180);
+            p[i*pperplan+2] = sqrt(e1[i]) * cos(lo1[i]*M_PI/180);
+            p[i*pperplan+3] = sqrt(e1[i]) * sin(lo1[i]*M_PI/180);
           } else {
-            p[i][2] = e1[i] * cos(lo1[i]*M_PI/180);
-            p[i][3] = e1[i] * sin(lo1[i]*M_PI/180);
+            p[i*pperplan+2] = e1[i] * cos(lo1[i]*M_PI/180);
+            p[i*pperplan+3] = e1[i] * sin(lo1[i]*M_PI/180);
           }
-          p[i][4] = inc1[i];
-          p[i][5] = bo1[i];
+          p[i*pperplan+4] = inc1[i];
+          p[i*pperplan+5] = bo1[i];
         }
       }
-      p[i][6] = mp1[i];
-      p[i][7] = rpors1[i];
+      p[i*pperplan+6] = mp1[i];
+      p[i*pperplan+7] = rpors1[i];
       if (MULTISTAR) {
         fscanf(aeifile, "%lf %lf %lf", &brightness1[i], &c1bin1[i], &c2bin1[i]);
-        p[i][8] = brightness1[i];
-        p[i][9] = c1bin1[i];
-        p[i][10] = c2bin1[i]; 
+        p[i*pperplan+8] = brightness1[i];
+        p[i*pperplan+9] = c1bin1[i];
+        p[i*pperplan+10] = c2bin1[i]; 
       }
       fgets(buffer, 1000, aeifile); // This line usually unnecessarily advances the file pointer to a new line. 
                                     // Unless  you are not multistar and but have too many inputs. It then  saves you from bad read-ins 
@@ -5689,11 +5316,9 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
     fscanf(aeifile, "%lf", &c1);
     fgets(buffer, 1000, aeifile);
     fscanf(aeifile, "%lf", &dilute);
-printf("rvjf = %i\n", RVJITTERFLAG);
     if (RVJITTERFLAG) {
       int ki;
       for (ki=0; ki<RVJITTERTOT; ki++) {
-printf("kih = %i\n", ki);
         fgets(buffer, 1000, aeifile);
         fscanf(aeifile, "%lf", &jittersize[ki]);
       }
@@ -5705,48 +5330,48 @@ printf("kih = %i\n", ki);
         fscanf(aeifile, "%lf", &jittersizettv[ki]);
       }
     }
-            if (CELERITE) {
-              int ki;
-              for (ki=0; ki<NCELERITE; ki++) {
-        fgets(buffer, 1000, aeifile);
-        fscanf(aeifile, "%lf", &celeriteps[ki]);
-              }
-            }
-            if (RVCELERITE) {
-              int ki;
-              for (ki=0; ki<NRVCELERITE; ki++) {
-        fgets(buffer, 1000, aeifile);
-        fscanf(aeifile, "%lf", &rvceleriteps[ki]);
-              }
-            }
- 
-    p[npl][0] = ms;
-    p[npl][1] = rstar;
-    p[npl][2] = c0;
-    p[npl][3] = c1;
-    p[npl][4] = dilute; 
-    if (RVJITTERFLAG) {
-      int ki;
-      for (ki=0; ki<RVJITTERTOT; ki++) {
-        p[npl][5+ki] = jittersize[ki];
-      }
-    }
-    if (TTVJITTERFLAG) {
-      int ki;
-      for (ki=0; ki<TTVJITTERTOT; ki++) {
-        p[npl][5+RVJITTERTOT+ki] = jittersizettv[ki];
-      }
-    }
     if (CELERITE) {
       int ki;
       for (ki=0; ki<NCELERITE; ki++) {
-        p[npl][5+RVJITTERTOT+TTVJITTERTOT+ki] = celeriteps[ki];
+        fgets(buffer, 1000, aeifile);
+        fscanf(aeifile, "%lf", &celeriteps[ki]);
       }
     }
     if (RVCELERITE) {
       int ki;
       for (ki=0; ki<NRVCELERITE; ki++) {
-        p[npl][5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+ki] = rvceleriteps[ki];
+        fgets(buffer, 1000, aeifile);
+        fscanf(aeifile, "%lf", &rvceleriteps[ki]);
+      }
+    }
+ 
+    p[npl*pperplan+0] = ms;
+    p[npl*pperplan+1] = rstar;
+    p[npl*pperplan+2] = c0;
+    p[npl*pperplan+3] = c1;
+    p[npl*pperplan+4] = dilute; 
+    if (RVJITTERFLAG) {
+      int ki;
+      for (ki=0; ki<RVJITTERTOT; ki++) {
+        p[npl*pperplan+5+ki] = jittersize[ki];
+      }
+    }
+    if (TTVJITTERFLAG) {
+      int ki;
+      for (ki=0; ki<TTVJITTERTOT; ki++) {
+        p[npl*pperplan+5+RVJITTERTOT+ki] = jittersizettv[ki];
+      }
+    }
+    if (CELERITE) {
+      int ki;
+      for (ki=0; ki<NCELERITE; ki++) {
+        p[npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+ki] = celeriteps[ki];
+      }
+    }
+    if (RVCELERITE) {
+      int ki;
+      for (ki=0; ki<NRVCELERITE; ki++) {
+        p[npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+ki] = rvceleriteps[ki];
       }
     }
 
@@ -5756,21 +5381,21 @@ printf("kih = %i\n", ki);
       masstot[0] = ms;
       for (i=0; i<npl; i++) {
         masstot[i+1] = masstot[i];
-        masstot[i+1] += p[i][6]/MSOMJ;
+        masstot[i+1] += p[i*pperplan+6]/MSOMJ;
       }
       for (i=0; i<npl; i++) {
-        double *orbelements = keptoorb(p[i][0], p[i][1], p[i][2]*M_PI/180., p[i][3]*M_PI/180., p[i][4]*M_PI/180., p[i][5]*M_PI/180., masstot[i+1]);
-        p[i][0] = orbelements[0];
-        p[i][1] = orbelements[1];
+        double *orbelements = keptoorb(p[i*pperplan+0], p[i*pperplan+1], p[i*pperplan+2]*M_PI/180., p[i*pperplan+3]*M_PI/180., p[i*pperplan+4]*M_PI/180., p[i*pperplan+5]*M_PI/180., masstot[i+1]);
+        p[i*pperplan+0] = orbelements[0];
+        p[i*pperplan+1] = orbelements[1];
         if (SQRTE) {
-          p[i][2] = sqrt(orbelements[2]) * cos(orbelements[5]);
-          p[i][3] = sqrt(orbelements[2]) * sin(orbelements[5]);
+          p[i*pperplan+2] = sqrt(orbelements[2]) * cos(orbelements[5]);
+          p[i*pperplan+3] = sqrt(orbelements[2]) * sin(orbelements[5]);
         } else {
-          p[i][2] = orbelements[2] * cos(orbelements[5]);
-          p[i][3] = orbelements[2] * sin(orbelements[5]);
+          p[i*pperplan+2] = orbelements[2] * cos(orbelements[5]);
+          p[i*pperplan+3] = orbelements[2] * sin(orbelements[5]);
         }
-        p[i][4] = orbelements[3]*180./M_PI;
-        p[i][5] = orbelements[4]*180./M_PI;
+        p[i*pperplan+4] = orbelements[3]*180./M_PI;
+        p[i*pperplan+5] = orbelements[4]*180./M_PI;
 
         free(orbelements);
       }
@@ -5781,21 +5406,21 @@ printf("kih = %i\n", ki);
       masstot[0] = ms;
       for (i=0; i<npl; i++) {
         masstot[i+1] = masstot[i];
-        masstot[i+1] += p[i][6]/MSOMJ;
+        masstot[i+1] += p[i*pperplan+6]/MSOMJ;
       }
       for (i=0; i<npl; i++) {
-        double *orbelements = keptoorbmean(p[i][0], p[i][1], p[i][2]*M_PI/180., p[i][3]*M_PI/180., p[i][4]*M_PI/180., p[i][5]*M_PI/180., masstot[i+1]);
-        p[i][0] = orbelements[0];
-        p[i][1] = orbelements[1];
+        double *orbelements = keptoorbmean(p[i*pperplan+0], p[i*pperplan+1], p[i*pperplan+2]*M_PI/180., p[i*pperplan+3]*M_PI/180., p[i*pperplan+4]*M_PI/180., p[i*pperplan+5]*M_PI/180., masstot[i+1]);
+        p[i*pperplan+0] = orbelements[0];
+        p[i*pperplan+1] = orbelements[1];
         if (SQRTE) {
-          p[i][2] = sqrt(orbelements[2]) * cos(orbelements[5]);
-          p[i][3] = sqrt(orbelements[2]) * sin(orbelements[5]);
+          p[i*pperplan+2] = sqrt(orbelements[2]) * cos(orbelements[5]);
+          p[i*pperplan+3] = sqrt(orbelements[2]) * sin(orbelements[5]);
         } else {
-          p[i][2] = orbelements[2] * cos(orbelements[5]);
-          p[i][3] = orbelements[2] * sin(orbelements[5]);
+          p[i*pperplan+2] = orbelements[2] * cos(orbelements[5]);
+          p[i*pperplan+3] = orbelements[2] * sin(orbelements[5]);
         }
-        p[i][4] = orbelements[3]*180./M_PI;
-        p[i][5] = orbelements[4]*180./M_PI;
+        p[i*pperplan+4] = orbelements[3]*180./M_PI;
+        p[i*pperplan+5] = orbelements[4]*180./M_PI;
         free(orbelements);
       }
     }
@@ -6279,14 +5904,14 @@ printf("kih = %i\n", ki);
             //if (splitincO && k==4 && ((i+nwalkers/2)/nwalkers)) p0[i][j][k] = 180. - p[j][k] + epsilon; 
             //else if (splitincO && k==5 && ((i+nwalkers/2)/nwalkers)) p0[i][j][k] = -p[j][k] + epsilon;
             //else p0[i][j][k] = p[j][k] + epsilon;
-            p0[i][j][k] = p[j][k] + epsilon;
+            p0[i][j][k] = p[j*pperplan+k] + epsilon;
             if ( (int) ceil(disperse) ) p0[i][j][k] += disperse*(1-parfix[j*pperplan+k])*step[j*pperplan+k]*gsl_ran_gaussian(r, 1.0);
           } while ( (IGT90 && (k==4 && p0[i][j][k] < 90.0)) || (MGT0 && (k==6 && p0[i][j][k] < 0.0)) );
         }
       }
       for (j=0; j<pstar; j++) {
         do {
-        p0[i][npl][j] = p[npl][j] + (1-parfix[npl*pperplan+j])*step[npl*pperplan+j]*gsl_ran_gaussian(r, 1.0);
+        p0[i][npl][j] = p[npl*pperplan+j] + (1-parfix[npl*pperplan+j])*step[npl*pperplan+j]*gsl_ran_gaussian(r, 1.0);
         if ( (int) ceil(disperse) ) p0[i][npl][j] += disperse*(1-parfix[npl*pperplan+j])*step[npl*pperplan+j]*gsl_ran_gaussian(r, 1.0);
         } while ( (TTVJITTERFLAG || RVJITTERFLAG) && (j > 4 && p0[i][npl][j] < 0.0) ); 
       }
@@ -6310,13 +5935,13 @@ printf("kih = %i\n", ki);
                 //if (splitincO && k==4 && ((i+nwalkers/2)/nwalkers)) p0N[w][i][j][k] = 180. - p[j][k] + epsilon; 
                 //else if (splitincO && k==5 && ((i+nwalkers/2)/nwalkers)) p0N[w][i][j][k] = -p[j][k] + epsilon;
                 //else p0N[w][i][j][k] = p[j][k] + epsilon;
-                p0N[w][i][j][k] = p[j][k] + epsilon;
+                p0N[w][i][j][k] = p[j*pperplan+k] + epsilon;
                 if ( (int) ceil(disperse) ) p0N[w][i][j][k] += disperse*(1-parfix[j*pperplan+k])*step[j*pperplan+k]*gsl_ran_gaussian(r, 1.0);
               } while ( (IGT90 && (k==4 && p0N[w][i][j][k] < 90.0)) ||  (MGT0 && (k==6 && p0N[w][i][j][k] < 0.0)) );
             }
           }
           for (j=0; j<pstar; j++) {
-            p0N[w][i][npl][j] = p[npl][j] + (1-parfix[npl*pperplan+j])*step[npl*pperplan+j]*gsl_ran_gaussian(r, 1.0);
+            p0N[w][i][npl][j] = p[npl*pperplan+j] + (1-parfix[npl*pperplan+j])*step[npl*pperplan+j]*gsl_ran_gaussian(r, 1.0);
             if ( (int) ceil(disperse) ) p0N[w][i][npl][j] += disperse*(1-parfix[npl*pperplan+j])*step[npl*pperplan+j]*gsl_ran_gaussian(r, 1.0);
           }
         } 
@@ -6370,7 +5995,6 @@ printf("kih = %i\n", ki);
 #endif
 
 
-  double ***dsetup (double **p, const int npl); //prototype 
   double ***dsetup2 (double *p, const int npl); //prototype 
   double ***dpintegrator_single (double ***int_in, double **tfe, double **tve, double **nte, int *cadencelist); //prototype 
   int dpintegrator_single_megno (double ***int_in); //prototype 
@@ -6379,9 +6003,9 @@ printf("kih = %i\n", ki);
 
 #if (demcmc_compile==0)
   printf("Sanity check:\n");
-  printf("p[][2]=%lf, orbelemets[2]=%lf\n", p[0][0], p[0][0]);
+  printf("p[][2]=%lf, orbelemets[2]=%lf\n", p[0], p[0]);
 
-  double ***int_in = dsetup(p, npl);
+  double ***int_in = dsetup2(p, npl);
   printf("int_in %lf, %lf, %lf, %lf\n", int_in[0][0][0], int_in[1][0][0], int_in[2][0][0], int_in[2][1][0]);
 
   double ***flux_rvs; 
@@ -6422,10 +6046,10 @@ printf("kih = %i\n", ki);
     int j_real = 0;
     int j_complex;
     double jitter, k1, k2, k3, S0, w0, Q;
-    jitter = p[npl][5+RVJITTERTOT+TTVJITTERTOT+0];
-    S0 = p[npl][5+RVJITTERTOT+TTVJITTERTOT+1];
-    w0 = p[npl][5+RVJITTERTOT+TTVJITTERTOT+2];
-    Q = p[npl][5+RVJITTERTOT+TTVJITTERTOT+3];
+    jitter = p[npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+0];
+    S0 = p[npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+1];
+    w0 = p[npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+2];
+    Q = p[npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+3];
     if (Q >= 0.5) {
       j_complex = 1;
     } else {
@@ -6476,7 +6100,6 @@ printf("kih = %i\n", ki);
   
     xisq = diffs+logdet;
    
-#if (demcmc_compile==0)
     printf("Celerite params:\n");
     printf("a+comp=%25.17lf\n", a_comp[0]);
     printf("b+comp=%25.17lf\n", b_comp[0]);
@@ -6499,8 +6122,6 @@ printf("kih = %i\n", ki);
     }
     fclose(tmtef);// = openf(tmtstr,"w");
  
-#endif
-  
     free(yvarp);
     free(diffys);
   }
@@ -6518,7 +6139,7 @@ printf("kih = %i\n", ki);
         newelist[0] = (double) maxkj;
         for (kj=0; kj<maxkj; kj++) {
           int jitterindex = (int) tve[3][1+kj]*NTELESCOPES + tve[4][1+kj];
-          double sigmajitter = p[npl][5+jitterindex]*MPSTOAUPD;
+          double sigmajitter = p[npl*pperplan+5+jitterindex]*MPSTOAUPD;
           double quadsum = sigmajitter*sigmajitter + radvs[3][1+kj]*radvs[3][1+kj];
           // double check this... factor of 1/2
           xisq += log(quadsum / (radvs[3][1+kj]*radvs[3][1+kj]) );
@@ -6549,10 +6170,10 @@ printf("kih = %i\n", ki);
       int j_real = 0;
       int j_complex;
       double jitter, k1, k2, k3, S0, w0, Q;
-      jitter = p[npl][5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+0];
-      S0 = p[npl][5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+1];
-      w0 = p[npl][5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+2];
-      Q = p[npl][5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+3];
+      jitter = p[npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+0];
+      S0 = p[npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+1];
+      w0 = p[npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+2];
+      Q = p[npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+3];
       if (Q >= 0.5) {
         j_complex = 1;
       } else {
@@ -6603,7 +6224,6 @@ printf("kih = %i\n", ki);
     
       xisq += diffs+logdet;
      
-#if (demcmc_compile==0)
       printf("a+comp=%25.17lf\n", a_comp[0]);
       printf("b+comp=%25.17lf\n", b_comp[0]);
       printf("c+comp=%25.17lf\n", c_comp[0]);
@@ -6625,9 +6245,6 @@ printf("kih = %i\n", ki);
       }
       fclose(tmtef);// = openf(tmtstr,"w");
    
-#endif
-  
-    
       free(yvarp);
       free(diffys);
   
@@ -6643,7 +6260,7 @@ printf("kih = %i\n", ki);
       newelistttv[0] = (double) maxkj;
       for (kj=0; kj<maxkj; kj++) {
         int jitterindex = (kj < NTTV[0][0]) ? 0 : 1 ; 
-        double sigmajitter = p[npl][5+RVJITTERTOT+jitterindex];
+        double sigmajitter = p[npl*pperplan+5+RVJITTERTOT+jitterindex];
         double quadsum = sigmajitter*sigmajitter + ttvts[3][1+kj]*ttvts[3][1+kj];
         // check that the index on ttvts should be 2
         xisq += log(quadsum / (ttvts[3][1+kj]*ttvts[3][1+kj]) );
@@ -6680,7 +6297,7 @@ printf("kih = %i\n", ki);
     int i0;
     for (i0=0; i0<npl; i0++) {
       printf("%lf\n", xisq);
-      xisq += -2.0*log( sin(p[i0][4] *M_PI/180.) ); 
+      xisq += -2.0*log( sin(p[i0*pperplan+4] *M_PI/180.) ); 
     }
   }
   printf("xisqnoe=%lf\n", xisq);
@@ -6689,12 +6306,12 @@ printf("kih = %i\n", ki);
     if (SQRTE) {
       int i0;
       for (i0=0; i0<npl; i0++) {
-        evector[i0] = pow(sqrt( pow(p[i0][2], 2) + pow(p[i0][3], 2) ), 2);
+        evector[i0] = pow(sqrt( pow(p[i0*pperplan+2], 2) + pow(p[i0*pperplan+3], 2) ), 2);
       }
     } else {
       int i0;
       for (i0=0; i0<npl; i0++) {
-        evector[i0] = sqrt( pow(p[i0][2], 2) + pow(p[i0][3], 2) );
+        evector[i0] = sqrt( pow(p[i0*pperplan+2], 2) + pow(p[i0*pperplan+3], 2) );
       }
     }
   }
@@ -6771,42 +6388,42 @@ printf("kih = %i\n", ki);
       fprintf(outfile2, "\t%.15lf", orbparam[ip][4]*180.0/M_PI);
       fprintf(outfile2, "\t%.15lf", orbparam[ip][5]*180.0/M_PI);
       for (ii=6; ii<8; ii++) {
-        fprintf(outfile2, "\t%.15lf", p[ip][ii]); 
+        fprintf(outfile2, "\t%.15lf", p[ip*pperplan+ii]); 
       }
       if (MULTISTAR) {
         for (ii=8; ii<11; ii++) {
-          fprintf(outfile2, "\t%.15lf", p[ip][ii]);
+          fprintf(outfile2, "\t%.15lf", p[ip*pperplan+ii]);
         }
       }
       fprintf(outfile2, "\n");
     }
-    fprintf(outfile2, "%.15lf ; Mstar (M_sol)\n", p[npl][0]);
-    fprintf(outfile2, "%.15lf ; Rstar (R_sol)\n", p[npl][1]);
-    fprintf(outfile2, "%.15lf ; c1 (linear limb darkening) \n", p[npl][2]);
-    fprintf(outfile2, "%.15lf ; c2 (quadratic limb darkening) \n", p[npl][3]);
-    fprintf(outfile2, "%.15lf ; dilution (frac light not from stars in system)\n", p[npl][4]);
+    fprintf(outfile2, "%.15lf ; Mstar (M_sol)\n", p[npl*pperplan+0]);
+    fprintf(outfile2, "%.15lf ; Rstar (R_sol)\n", p[npl*pperplan+1]);
+    fprintf(outfile2, "%.15lf ; c1 (linear limb darkening) \n", p[npl*pperplan+2]);
+    fprintf(outfile2, "%.15lf ; c2 (quadratic limb darkening) \n", p[npl*pperplan+3]);
+    fprintf(outfile2, "%.15lf ; dilution (frac light not from stars in system)\n", p[npl*pperplan+4]);
     if (RVJITTERFLAG) {
       int ki;
       for (ki=0; ki<(RVJITTERTOT); ki++) {
-        fprintf(outfile2, "%.15lf ; rv jitter %i\n", p[npl][5+ki], ki);
+        fprintf(outfile2, "%.15lf ; rv jitter %i\n", p[npl*pperplan+5+ki], ki);
       }
     }
     if (TTVJITTERFLAG) {
       int ki;
       for (ki=0; ki<(TTVJITTERTOT); ki++) {
-        fprintf(outfile2, "%.15lf ; ttv jitter %i\n", p[npl][5+RVJITTERTOT+ki], ki);
+        fprintf(outfile2, "%.15lf ; ttv jitter %i\n", p[npl*pperplan+5+RVJITTERTOT+ki], ki);
       }
     }
     if (CELERITE) {
       int ki;
       for (ki=0; ki<NCELERITE; ki++) {
-        fprintf(outfile2, "%.15lf ; celerite \n", p[npl][5+RVJITTERTOT+TTVJITTERTOT+ki]);
+        fprintf(outfile2, "%.15lf ; celerite \n", p[npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+ki]);
       }
     }
     if (RVCELERITE) {
       int ki;
       for (ki=0; ki<NRVCELERITE; ki++) {
-        fprintf(outfile2, "%.15lf ; rvcelerite \n", p[npl][5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+ki]);
+        fprintf(outfile2, "%.15lf ; rvcelerite \n", p[npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+ki]);
       }
     }
     fprintf(outfile2, " ; Comments: These coordinates are jacobian (see Lee & Peale 2003).\n");
@@ -6841,42 +6458,42 @@ printf("kih = %i\n", ki);
       fprintf(outfile2, "\t%.15lf", orbparam[ip][3]*180.0/M_PI);
       fprintf(outfile2, "\t%.15lf", orbparam[ip][4]*180.0/M_PI);
       for (ii=6; ii<8; ii++) {
-        fprintf(outfile2, "\t%.15lf", p[ip][ii]); 
+        fprintf(outfile2, "\t%.15lf", p[ip*pperplan+ii]); 
       }
       if (MULTISTAR) {
         for (ii=8; ii<11; ii++) {
-          fprintf(outfile2, "\t%.15lf", p[ip][ii]);
+          fprintf(outfile2, "\t%.15lf", p[ip*pperplan+ii]);
         }
       }
       fprintf(outfile2, "\n");
     }
-    fprintf(outfile2, "%.15lf ; Mstar (M_sol)\n", p[npl][0]);
-    fprintf(outfile2, "%.15lf ; Rstar (R_sol)\n", p[npl][1]);
-    fprintf(outfile2, "%.15lf ; c1 (linear limb darkening) \n", p[npl][2]);
-    fprintf(outfile2, "%.15lf ; c2 (quadratic limb darkening) \n", p[npl][3]);
-    fprintf(outfile2, "%.15lf ; dilution (frac light not from stars in system)\n", p[npl][4]);
+    fprintf(outfile2, "%.15lf ; Mstar (M_sol)\n", p[npl*pperplan+0]);
+    fprintf(outfile2, "%.15lf ; Rstar (R_sol)\n", p[npl*pperplan+1]);
+    fprintf(outfile2, "%.15lf ; c1 (linear limb darkening) \n", p[npl*pperplan+2]);
+    fprintf(outfile2, "%.15lf ; c2 (quadratic limb darkening) \n", p[npl*pperplan+3]);
+    fprintf(outfile2, "%.15lf ; dilution (frac light not from stars in system)\n", p[npl*pperplan+4]);
     if (RVJITTERFLAG) {
       int ki;
       for (ki=0; ki<(RVJITTERTOT); ki++) {
-        fprintf(outfile2, "%.15lf ; rv jitter %i\n", p[npl][5+ki], ki);
+        fprintf(outfile2, "%.15lf ; rv jitter %i\n", p[npl*pperplan+5+ki], ki);
       }
     }
     if (TTVJITTERFLAG) {
       int ki;
       for (ki=0; ki<(TTVJITTERTOT); ki++) {
-        fprintf(outfile2, "%.15lf ; ttv jitter %i\n", p[npl][5+RVJITTERTOT+ki], ki);
+        fprintf(outfile2, "%.15lf ; ttv jitter %i\n", p[npl*pperplan+5+RVJITTERTOT+ki], ki);
       }
     }
     if (CELERITE) {
       int ki;
       for (ki=0; ki<NCELERITE; ki++) {
-        fprintf(outfile2, "%.15lf ; celerite \n", p[npl][5+RVJITTERTOT+TTVJITTERTOT+ki]);
+        fprintf(outfile2, "%.15lf ; celerite \n", p[npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+ki]);
       }
     }
     if (RVCELERITE) {
       int ki;
       for (ki=0; ki<NRVCELERITE; ki++) {
-        fprintf(outfile2, "%.15lf ; rvcelerite \n", p[npl][5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+ki]);
+        fprintf(outfile2, "%.15lf ; rvcelerite \n", p[npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+ki]);
       }
     }
     fprintf(outfile2, " ; Comments: These coordinates are jacobian (see Lee & Peale 2003).\n");
@@ -6903,42 +6520,42 @@ printf("kih = %i\n", ki);
       fprintf(outfile2, "\t%.15lf", aeiparam[ip][4]*180.0/M_PI);
       fprintf(outfile2, "\t%.15lf", aeiparam[ip][5]*180.0/M_PI);
       for (ii=6; ii<8; ii++) {
-        fprintf(outfile2, "\t%.15lf", p[ip][ii]); 
+        fprintf(outfile2, "\t%.15lf", p[ip*pperplan+ii]); 
       }
       if (MULTISTAR) {
         for (ii=8; ii<11; ii++) {
-          fprintf(outfile2, "\t%.15lf", p[ip][ii]);
+          fprintf(outfile2, "\t%.15lf", p[ip*pperplan+ii]);
         }
       }
       fprintf(outfile2, "\n");
     }
-    fprintf(outfile2, "%.15lf ; Mstar (M_sol)\n", p[npl][0]);
-    fprintf(outfile2, "%.15lf ; Rstar (R_sol)\n", p[npl][1]);
-    fprintf(outfile2, "%.15lf ; c1 (linear limb darkening) \n", p[npl][2]);
-    fprintf(outfile2, "%.15lf ; c2 (quadratic limb darkening) \n", p[npl][3]);
-    fprintf(outfile2, "%.15lf ; dilution (frac light not from stars in system)\n", p[npl][4]);
+    fprintf(outfile2, "%.15lf ; Mstar (M_sol)\n", p[npl*pperplan+0]);
+    fprintf(outfile2, "%.15lf ; Rstar (R_sol)\n", p[npl*pperplan+1]);
+    fprintf(outfile2, "%.15lf ; c1 (linear limb darkening) \n", p[npl*pperplan+2]);
+    fprintf(outfile2, "%.15lf ; c2 (quadratic limb darkening) \n", p[npl*pperplan+3]);
+    fprintf(outfile2, "%.15lf ; dilution (frac light not from stars in system)\n", p[npl*pperplan+4]);
     if (RVJITTERFLAG) {
       int ki;
       for (ki=0; ki<(RVJITTERTOT); ki++) {
-        fprintf(outfile2, "%.15lf ; rv jitter %i\n", p[npl][5+ki], ki);
+        fprintf(outfile2, "%.15lf ; rv jitter %i\n", p[npl*pperplan+5+ki], ki);
       }
     }
     if (TTVJITTERFLAG) {
       int ki;
       for (ki=0; ki<(TTVJITTERTOT); ki++) {
-        fprintf(outfile2, "%.15lf ; ttv jitter %i\n", p[npl][5+RVJITTERTOT+ki], ki);
+        fprintf(outfile2, "%.15lf ; ttv jitter %i\n", p[npl*pperplan+5+RVJITTERTOT+ki], ki);
       }
     }
     if (CELERITE) {
       int ki;
       for (ki=0; ki<NCELERITE; ki++) {
-        fprintf(outfile2, "%.15lf ; celerite \n", p[npl][5+RVJITTERTOT+TTVJITTERTOT+ki]);
+        fprintf(outfile2, "%.15lf ; celerite \n", p[npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+ki]);
       }
     }
     if (RVCELERITE) {
       int ki;
       for (ki=0; ki<NRVCELERITE; ki++) {
-        fprintf(outfile2, "%.15lf ; rvcelerite \n", p[npl][5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+ki]);
+        fprintf(outfile2, "%.15lf ; rvcelerite \n", p[npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+ki]);
       }
     }
     fprintf(outfile2, " ; Comments: These coordinates are jacobian (see Lee & Peale 2003).\n");
@@ -9100,7 +8717,7 @@ printf("kih = %i\n", ki);
 #elif (demcmc_compile == 3)
 
   int i;
-  double ***int_in = dsetup(p, npl);
+  double ***int_in = dsetup2(p, npl);
   double ***flux_rvs; 
   if (MULTISTAR) flux_rvs = dpintegrator_multi(int_in, tfe, tve, cadencelist);
   else flux_rvs = dpintegrator_single(int_in, tfe, tve, nte, cadencelist);
@@ -9143,9 +8760,6 @@ printf("kih = %i\n", ki);
     free(ETTV);
   }
 
-  if (!RESTART) {
-    for (i=0; i<nbodies; i++) free(p[i]);
-  }
   free(p);
 
   for (i=0; i<3; i++) free(tfe[i]);
