@@ -18,8 +18,6 @@
 // $ gcc -Ofast -o stability -lgsl -lgslcblas -fopenmp demcmc.c
 // g++ -w -O3 -o lcout -I/home/smills/celerite/celerite/cpp/include -I/home/smills/celerite/celerite/cpp/lib/eigen_3.3.3 -lm -lgsl -lgslcblas -fpermissive demcmc.cpp
 
-//Testing adding a line
-
 #if (demcmc_compile==1) 
 #include <mpi.h>
 #endif
@@ -3610,7 +3608,10 @@ int getinput(char fname[]) {
   fgets(buffer, 1000, inputf);
   fscanf(inputf, "%s %s %i", type, varname, &NTEMPS); fgets(buffer, 1000, inputf); 
   printf("sqrte, ecuton, eprior[0], esigma = %i, %i, %i, %lf\n", SQRTE, ECUTON, EPRIORV[0], ESIGMA);
-
+  if (NTEMPS != 0){
+    printf("WARNING!\n");
+    printf("This version of the code stets NTEMPS=0!\n");
+  }
 
   for (i=0; i<9; i++) fgets(buffer, 1000, inputf);
   for (i=0; i<npl; i++) {
@@ -6050,7 +6051,6 @@ printf("kih = %i\n", ki);
 
   if (RESTART) {
   
-    if (! NTEMPS) {
       FILE *restartf = fopen(chainres, "r");
       if (restartf == NULL) {
         printf("Error: %s\n", chainres); 
@@ -6142,111 +6142,10 @@ printf("kih = %i\n", ki);
       printf("xisqmin=%lf\n", xisqmin);
       printf("gamma=%lf\n", gamma); 
     
-    } else { // if NTEMPS:
-  
-      for (w=0; w<NTEMPS; w++) {
- 
-        char chainresw[200]; 
-        sprintf(chainresw, "%s_%i", chainres, w);
-        FILE *restartf = fopen(chainresw, "r");
-        if (restartf == NULL) {
-          printf("nofile\n");
-          exit(0);
-        }
-        double ignore; 
-        char ignorec[1000];
-        for (i=0; i<nwalkers; i++) {
-          int j; 
-          for (j=0; j<npl; j++) {
-            fscanf(restartf, " %lf %lf %lf %lf %lf %lf %lf %lf %lf", &ignore, &p0N[w][i][j][0], &p0N[w][i][j][1], &p0N[w][i][j][2], &p0N[w][i][j][3], &p0N[w][i][j][4], &p0N[w][i][j][5], &p0N[w][i][j][6], &p0N[w][i][j][7]);
-            if (MULTISTAR) {
-              fscanf(restartf, "%lf %lf %lf", &p0N[w][i][j][8], &p0N[w][i][j][9], &p0N[w][i][j][10]);
-            }
-          }
-          fscanf(restartf, "%lf", &p0N[w][i][npl][0]);
-          fgets(ignorec, 1000, restartf);
-          fscanf(restartf, "%lf", &p0N[w][i][npl][1]);
-          fgets(ignorec, 1000, restartf);
-          fscanf(restartf, "%lf", &p0N[w][i][npl][2]);
-          fgets(ignorec, 1000, restartf);
-          fscanf(restartf, "%lf", &p0N[w][i][npl][3]);
-          fgets(ignorec, 1000, restartf);
-          fscanf(restartf, "%lf", &p0N[w][i][npl][4]);
-          fgets(ignorec, 1000, restartf);
-          if (RVJITTERFLAG) {
-            int ki;
-            for (ki=0; ki<(RVJITTERTOT); ki++) {
-              fscanf(restartf, "%lf", &p0N[w][i][npl][5+ki]);
-              fgets(ignorec, 1000, restartf);
-            }
-          }
-          if (TTVJITTERFLAG) {
-            int ki;
-            for (ki=0; ki<(TTVJITTERTOT); ki++) {
-              fscanf(restartf, "%lf", &p0N[w][i][npl][5+RVJITTERTOT+ki]);
-              fgets(ignorec, 1000, restartf);
-            }
-          }
-          if (CELERITE) {
-            int ki;
-            for (ki=0; ki<NCELERITE; ki++) {
-              fscanf(restartf, "%lf", &p0N[w][i][npl][5+RVJITTERTOT+TTVJITTERTOT+ki]);
-              fgets(ignorec, 1000, restartf);
-            }
-          }
-          if (RVCELERITE) {
-            int ki;
-            for (ki=0; ki<NRVCELERITE; ki++) {
-              fscanf(restartf, "%lf", &p0N[w][i][npl][5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+ki]);
-              fgets(ignorec, 1000, restartf);
-            }
-          }
-          fgets(ignorec, 1000, restartf);
-        }
-        fclose(restartf);
-    
-        char gresw[200];
-        sprintf(gresw, "%s_%i", gres, w);
-        FILE *regammaf = fopen(gresw,"r");
-        long genres;
-        double grac, gammares;
-        fscanf(regammaf, "%li %lf %lf", &genres, &grac, &gammares); 
-        fclose(regammaf);
-       
-        // rounding generation
-        genres = genres/10;
-        genres = genres*10;    
-        jj = genres+1;
-   
-        // optimal multiplier
-        gammaN[w] = gammares;
-     
-        if (w ==0) {
-          FILE *rebsqf = fopen(bsqres, "r");
-          char garbage[10000];
-          for (i=0; i<(1+npl+pstar+1); i++) {
-            fgets(garbage, 10000, rebsqf);
-          }
-          char cgarbage;
-          for (i=0; i<11; i++) {
-            cgarbage = fgetc(rebsqf);
-          }
-          double rexisqmin;
-          fscanf(rebsqf, "%lf", &rexisqmin);
-          fclose(rebsqf);
-          xisqmin = rexisqmin;
-         
-          printf("xisqmin=%lf\n", xisqmin);
-          printf("gamma=%lf\n", gammaN[w]); 
-        }
-      }
-    }
-    
   
   } else {  //if not RESTART
 
     printf("Initializing Walkers\n");
-    if (!NTEMPS) {
     // take small random steps to initialize walkers
     for (i=0; i<nwalkers; i++) {
       int j;
@@ -6276,35 +6175,6 @@ printf("kih = %i\n", ki);
     // optimal multiplier
     gamma = 2.38 / sqrt(2.*ndim);
 
-    } else { // if NTEMPS
-      for (w=0; w<NTEMPS; w++) {
-        // take small random steps to initialize walkers
-        for (i=0; i<nwalkers; i++) {
-          int j;
-          for (j=0; j<npl; j++) {
-            int k;
-            for (k=0; k<pperplan; k++) {
-              // make sure all inclinations still > 90.0
-              do {
-                double epsilon = (1-parfix[j*pperplan+k])*step[j*pperplan+k]*gsl_ran_gaussian(r, 1.0);
-                // don't split inclinations....
-                //if (splitincO && k==4 && ((i+nwalkers/2)/nwalkers)) p0N[w][i][j][k] = 180. - p[j][k] + epsilon; 
-                //else if (splitincO && k==5 && ((i+nwalkers/2)/nwalkers)) p0N[w][i][j][k] = -p[j][k] + epsilon;
-                //else p0N[w][i][j][k] = p[j][k] + epsilon;
-                p0N[w][i][j][k] = p[j][k] + epsilon;
-                if ( (int) ceil(disperse) ) p0N[w][i][j][k] += disperse*(1-parfix[j*pperplan+k])*step[j*pperplan+k]*gsl_ran_gaussian(r, 1.0);
-              } while ( (IGT90 && (k==4 && p0N[w][i][j][k] < 90.0)) ||  (MGT0 && (k==6 && p0N[w][i][j][k] < 0.0)) );
-            }
-          }
-          for (j=0; j<pstar; j++) {
-            p0N[w][i][npl][j] = p[npl][j] + (1-parfix[npl*pperplan+j])*step[npl*pperplan+j]*gsl_ran_gaussian(r, 1.0);
-            if ( (int) ceil(disperse) ) p0N[w][i][npl][j] += disperse*(1-parfix[npl*pperplan+j])*step[npl*pperplan+j]*gsl_ran_gaussian(r, 1.0);
-          }
-        } 
-     
-        gammaN[w] = 2.38 / sqrt(2.*ndim);
-      }
-    }
   }
 
   printf("Initialized Walkers\n");
@@ -6314,37 +6184,16 @@ printf("kih = %i\n", ki);
   double *p0local = malloc(totalparams*sofd);
   double **p0localN; 
 
-  if (NTEMPS) {
-    p0localN = malloc(NTEMPS*sofds);
-    for (w=0; w<NTEMPS; w++) {
-      p0localN[w] = malloc(totalparams*sofd);
-    }
-    for (w=0; w<NTEMPS; w++) {
-      for (i=0; i<nwalkers; i++) {
-        int j;
-        for (j=0; j<npl; j++) {
-          int k;
-          for (k=0; k<pperplan; k++) {
-            p0localN[w][i*pperwalker + j*pperplan + k] = p0N[w][i][j][k];
-          }
-        }
-        for (j=0; j<pstar; j++) {
-          p0localN[w][i*pperwalker + npl*pperplan + j] = p0N[w][i][npl][j];
-        }
+  for (i=0; i<nwalkers; i++) {
+    int j;
+    for (j=0; j<npl; j++) {
+      int k;
+      for (k=0; k<pperplan; k++) {
+        p0local[i*pperwalker + j*pperplan + k] = p0[i][j][k];
       }
     }
-  } else {
-    for (i=0; i<nwalkers; i++) {
-      int j;
-      for (j=0; j<npl; j++) {
-        int k;
-        for (k=0; k<pperplan; k++) {
-          p0local[i*pperwalker + j*pperplan + k] = p0[i][j][k];
-        }
-      }
-      for (j=0; j<pstar; j++) {
-        p0local[i*pperwalker + npl*pperplan + j] = p0[i][npl][j];
-      }
+    for (j=0; j<pstar; j++) {
+      p0local[i*pperwalker + npl*pperplan + j] = p0[i][npl][j];
     }
   }
 
@@ -6960,36 +6809,146 @@ printf("kih = %i\n", ki);
   // xi squared array (one value per walker)
   double *xisq0 = malloc(nwalkers*sofd);
   double **xisq0N;
-  if (NTEMPS) {
-    xisq0N = malloc(NTEMPS*sofds);
-    for (w=0; w<NTEMPS; w++) {
-      xisq0N[w] = malloc(nwalkers*sofd);
-    }
-  }
 
-  if (! NTEMPS) {
-    for (i=0; i<nwalkers; i++) {
-      double ***int_in = dsetup2(&p0local[pperwalker*i], npl);
-      printf("Converted to XYZ\n");
-      double ***flux_rvs; 
-      if (MULTISTAR) flux_rvs = dpintegrator_multi(int_in, tfe, tve, cadencelist);
-      else flux_rvs = dpintegrator_single(int_in, tfe, tve, nte, cadencelist);
-      printf("Computed Flux\n");
-      double **ttvts = flux_rvs[2];
-      double **flux = flux_rvs[0];
-      double **radvs = flux_rvs[1];
-      double *dev = devoerr(flux);
-      double xisqtemp = 0;
-      long il;
-      long maxil = (long) dev[0];
-      if (! CELERITE) { 
-        for (il=0; il<maxil; il++) xisqtemp += dev[il+1]*dev[il+1];
-      } else { // if celerite
-        double *xs = flux_rvs[0][0];
-            long maxil = (long) xs[0];
-        double *trueys = flux_rvs[0][1];
-        double *modelys = flux_rvs[0][2];
-        double *es = flux_rvs[0][3];
+  for (i=0; i<nwalkers; i++) {
+    double ***int_in = dsetup2(&p0local[pperwalker*i], npl);
+    printf("Converted to XYZ\n");
+    double ***flux_rvs; 
+    if (MULTISTAR) flux_rvs = dpintegrator_multi(int_in, tfe, tve, cadencelist);
+    else flux_rvs = dpintegrator_single(int_in, tfe, tve, nte, cadencelist);
+    printf("Computed Flux\n");
+    double **ttvts = flux_rvs[2];
+    double **flux = flux_rvs[0];
+    double **radvs = flux_rvs[1];
+    double *dev = devoerr(flux);
+    double xisqtemp = 0;
+    long il;
+    long maxil = (long) dev[0];
+    if (! CELERITE) { 
+      for (il=0; il<maxil; il++) xisqtemp += dev[il+1]*dev[il+1];
+    } else { // if celerite
+      double *xs = flux_rvs[0][0];
+          long maxil = (long) xs[0];
+      double *trueys = flux_rvs[0][1];
+      double *modelys = flux_rvs[0][2];
+      double *es = flux_rvs[0][3];
+      double *diffys = malloc(sofd*maxil);
+      for (il=0; il<maxil; il++) { 
+         diffys[il] = trueys[il+1]-modelys[il+1];
+      }
+      double *yvarp = malloc(sofd*maxil);
+      for (il=0; il<maxil; il++) { 
+         yvarp[il] = es[il+1]*es[il+1]; 
+      }
+      double *xp = &xs[1]; 
+      
+      int j_real = 0;
+      int j_complex;
+      double jitter, k1, k2, k3, S0, w0, Q;
+      jitter = p0local[pperwalker*i+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+0];// p[npl][5+RVJITTERTOT+TTVJITTERTOT+0];
+      S0 = p0local[pperwalker*i+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+1]; //p[npl][5+RVJITTERTOT+TTVJITTERTOT+1];
+      w0 = p0local[pperwalker*i+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+2]; //p[npl][5+RVJITTERTOT+TTVJITTERTOT+2];
+      Q = p0local[pperwalker*i+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+3];//p[npl][5+RVJITTERTOT+TTVJITTERTOT+3];
+      if (Q >= 0.5) {
+        j_complex = 1;
+      } else {
+        j_complex = 2;
+      }
+      VectorXd a_real(j_real),
+              c_real(j_real),
+              a_comp(j_complex),
+              b_comp(j_complex),
+              c_comp(j_complex),
+              d_comp(j_complex);
+      if (Q >= 0.5) {
+        k1 = S0*w0*Q;
+        k2 = sqrt(4.*Q*Q - 1.);
+        k3 = w0/(2.*Q);
+        a_comp << k1;
+        b_comp << k1/k2;
+        c_comp << k3;
+        d_comp << k3*k2;
+      } else {
+        j_complex = 2;
+        k1 = 0.5*S0*w0*Q;
+        k2 = sqrt(1. - 4.*Q*Q);
+        k3 = w0/(2.*Q);
+        a_comp << k1*(1. + 1./k2), k1*(1. - 1./k2);
+        b_comp << 0., 0.;
+        c_comp << k3*(1. - k2), k3*(1. + k2);
+        d_comp << 0., 0.;
+      }
+    
+   
+      printf("%lf %lf %lf %lf\n", a_comp[0], b_comp[0], c_comp[0], d_comp[0]);
+  
+    
+      VectorXd x = VectorXd::Map(xp, maxil);
+      VectorXd yvar = VectorXd::Map(yvarp, maxil);
+      VectorXd dy = VectorXd::Map(diffys, maxil);
+   
+      celerite::solver::CholeskySolver<double> solver;
+      try {
+      solver.compute(
+            jitter,
+            a_real, c_real,
+            a_comp, b_comp, c_comp, d_comp,
+            x, yvar  // Note: this is the measurement _variance_
+        );
+      } catch ( std::exception e1 ) {
+        xisqtemp = HUGE_VAL;
+        goto celeritefail;
+      }
+    
+      // see l.186-192 in celerite.py
+      double logdet, diffs, llike;
+      logdet = solver.log_determinant();
+      diffs = solver.dot_solve(dy); 
+      llike = -0.5 * (diffs + logdet); // hm, this is wrong 
+  
+    
+    
+      xisqtemp = diffs+logdet;
+      printf("xsiqtemp=%lf\n", xisqtemp);
+  
+      free(yvarp);
+      free(diffys);
+  
+    }
+    double *newelist;
+ 
+    if (RVS) {
+      if (! RVCELERITE) { 
+        double *newelist;
+        if (RVJITTERFLAG) {
+          long kj;
+          long maxkj = (long) tve[0][0]; 
+          newelist=malloc((maxkj+1)*sofd);
+          newelist[0] = (double) maxkj;
+          for (kj=0; kj<maxkj; kj++) {
+            int jitterindex = (int) tve[3][1+kj]*NTELESCOPES + tve[4][1+kj];
+            //double sigmajitter = p[npl][5+jitterindex]*MPSTOAUPD;
+            double sigmajitter = p0local[pperwalker*i+npl*pperplan+5+jitterindex]*MPSTOAUPD;
+            double quadsum = sigmajitter*sigmajitter + radvs[3][1+kj]*radvs[3][1+kj];
+            // double check this... factor of 1/2
+            xisqtemp += log(quadsum / (radvs[3][1+kj]*radvs[3][1+kj]) );
+            newelist[1+kj] = sqrt( quadsum );
+          }
+          radvs[3] = newelist;
+        }
+
+        double *rvdev = devoerr(radvs);
+        long maxil = (long) rvdev[0];
+        for (il=0; il<maxil; il++) xisqtemp += rvdev[il+1]*rvdev[il+1];
+        free(rvdev);
+  
+  
+      } else { // if rvcelerite
+        double *xs = flux_rvs[1][0];
+        long maxil = (long) xs[0];
+        double *trueys = flux_rvs[1][1];
+        double *modelys = flux_rvs[1][2];
+        double *es = flux_rvs[1][3];
         double *diffys = malloc(sofd*maxil);
         for (il=0; il<maxil; il++) { 
            diffys[il] = trueys[il+1]-modelys[il+1];
@@ -7003,10 +6962,10 @@ printf("kih = %i\n", ki);
         int j_real = 0;
         int j_complex;
         double jitter, k1, k2, k3, S0, w0, Q;
-        jitter = p0local[pperwalker*i+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+0];// p[npl][5+RVJITTERTOT+TTVJITTERTOT+0];
-        S0 = p0local[pperwalker*i+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+1]; //p[npl][5+RVJITTERTOT+TTVJITTERTOT+1];
-        w0 = p0local[pperwalker*i+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+2]; //p[npl][5+RVJITTERTOT+TTVJITTERTOT+2];
-        Q = p0local[pperwalker*i+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+3];//p[npl][5+RVJITTERTOT+TTVJITTERTOT+3];
+        jitter = p0local[pperwalker*i+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+0];// p[npl][5+RVJITTERTOT+TTVJITTERTOT+0];
+        S0 = p0local[pperwalker*i+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+1]; //p[npl][5+RVJITTERTOT+TTVJITTERTOT+1];
+        w0 = p0local[pperwalker*i+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+2]; //p[npl][5+RVJITTERTOT+TTVJITTERTOT+2];
+        Q = p0local[pperwalker*i+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+3];//p[npl][5+RVJITTERTOT+TTVJITTERTOT+3];
         if (Q >= 0.5) {
           j_complex = 1;
         } else {
@@ -7036,601 +6995,160 @@ printf("kih = %i\n", ki);
           c_comp << k3*(1. - k2), k3*(1. + k2);
           d_comp << 0., 0.;
         }
-      
      
-        printf("%lf %lf %lf %lf\n", a_comp[0], b_comp[0], c_comp[0], d_comp[0]);
-    
       
         VectorXd x = VectorXd::Map(xp, maxil);
         VectorXd yvar = VectorXd::Map(yvarp, maxil);
         VectorXd dy = VectorXd::Map(diffys, maxil);
-     
+      
         celerite::solver::CholeskySolver<double> solver;
-        try {
         solver.compute(
               jitter,
               a_real, c_real,
               a_comp, b_comp, c_comp, d_comp,
               x, yvar  // Note: this is the measurement _variance_
           );
-        } catch ( std::exception e1 ) {
-          xisqtemp = HUGE_VAL;
-          goto celeritefail;
-        }
       
         // see l.186-192 in celerite.py
         double logdet, diffs, llike;
         logdet = solver.log_determinant();
         diffs = solver.dot_solve(dy); 
-        llike = -0.5 * (diffs + logdet); // hm, this is wrong 
-    
+        llike = -0.5 * (diffs + logdet); 
       
-      
-        xisqtemp = diffs+logdet;
-        printf("xsiqtemp=%lf\n", xisqtemp);
+        xisqtemp += diffs+logdet;
+       
+#if (demcmc_compile==0)
+        printf("diffs=%lf\n", diffs);
+        printf("logdet=%lf\n", logdet);
+        printf("llike=%lf\n", llike);
     
+        VectorXd prediction = solver.predict(dy, x);
+        char tmtefstr[1000];
+        strcpy(tmtefstr, "rv_");
+        strcat(tmtefstr, OUTSTR);
+        strcat(tmtefstr, ".gp_rvout");
+        FILE *tmtef;
+        tmtef = fopen(tmtefstr, "a");
+        long ijk;
+        for (ijk=0; ijk<maxil; ijk++) {
+          fprintf(tmtef, "%.12lf \n", prediction[ijk]);
+        }
+        fclose(tmtef);// = openf(tmtstr,"w");
+     
+#endif        
         free(yvarp);
         free(diffys);
-    
       }
-      double *newelist;
-   
-      if (RVS) {
-        if (! RVCELERITE) { 
-          double *newelist;
-          if (RVJITTERFLAG) {
-            long kj;
-            long maxkj = (long) tve[0][0]; 
-            newelist=malloc((maxkj+1)*sofd);
-            newelist[0] = (double) maxkj;
-            for (kj=0; kj<maxkj; kj++) {
-              int jitterindex = (int) tve[3][1+kj]*NTELESCOPES + tve[4][1+kj];
-              //double sigmajitter = p[npl][5+jitterindex]*MPSTOAUPD;
-              double sigmajitter = p0local[pperwalker*i+npl*pperplan+5+jitterindex]*MPSTOAUPD;
-              double quadsum = sigmajitter*sigmajitter + radvs[3][1+kj]*radvs[3][1+kj];
-              // double check this... factor of 1/2
-              xisqtemp += log(quadsum / (radvs[3][1+kj]*radvs[3][1+kj]) );
-              newelist[1+kj] = sqrt( quadsum );
-            }
-            radvs[3] = newelist;
-          }
-  
-          double *rvdev = devoerr(radvs);
-          long maxil = (long) rvdev[0];
-          for (il=0; il<maxil; il++) xisqtemp += rvdev[il+1]*rvdev[il+1];
-          free(rvdev);
-    
-    
-        } else { // if rvcelerite
-          double *xs = flux_rvs[1][0];
-          long maxil = (long) xs[0];
-          double *trueys = flux_rvs[1][1];
-          double *modelys = flux_rvs[1][2];
-          double *es = flux_rvs[1][3];
-          double *diffys = malloc(sofd*maxil);
-          for (il=0; il<maxil; il++) { 
-             diffys[il] = trueys[il+1]-modelys[il+1];
-          }
-          double *yvarp = malloc(sofd*maxil);
-          for (il=0; il<maxil; il++) { 
-             yvarp[il] = es[il+1]*es[il+1]; 
-          }
-          double *xp = &xs[1]; 
-          
-          int j_real = 0;
-          int j_complex;
-          double jitter, k1, k2, k3, S0, w0, Q;
-          jitter = p0local[pperwalker*i+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+0];// p[npl][5+RVJITTERTOT+TTVJITTERTOT+0];
-          S0 = p0local[pperwalker*i+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+1]; //p[npl][5+RVJITTERTOT+TTVJITTERTOT+1];
-          w0 = p0local[pperwalker*i+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+2]; //p[npl][5+RVJITTERTOT+TTVJITTERTOT+2];
-          Q = p0local[pperwalker*i+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+3];//p[npl][5+RVJITTERTOT+TTVJITTERTOT+3];
-          if (Q >= 0.5) {
-            j_complex = 1;
-          } else {
-            j_complex = 2;
-          }
-          VectorXd a_real(j_real),
-                  c_real(j_real),
-                  a_comp(j_complex),
-                  b_comp(j_complex),
-                  c_comp(j_complex),
-                  d_comp(j_complex);
-          if (Q >= 0.5) {
-            k1 = S0*w0*Q;
-            k2 = sqrt(4.*Q*Q - 1.);
-            k3 = w0/(2.*Q);
-            a_comp << k1;
-            b_comp << k1/k2;
-            c_comp << k3;
-            d_comp << k3*k2;
-          } else {
-            j_complex = 2;
-            k1 = 0.5*S0*w0*Q;
-            k2 = sqrt(1. - 4.*Q*Q);
-            k3 = w0/(2.*Q);
-            a_comp << k1*(1. + 1./k2), k1*(1. - 1./k2);
-            b_comp << 0., 0.;
-            c_comp << k3*(1. - k2), k3*(1. + k2);
-            d_comp << 0., 0.;
-          }
-       
-        
-          VectorXd x = VectorXd::Map(xp, maxil);
-          VectorXd yvar = VectorXd::Map(yvarp, maxil);
-          VectorXd dy = VectorXd::Map(diffys, maxil);
-        
-          celerite::solver::CholeskySolver<double> solver;
-          solver.compute(
-                jitter,
-                a_real, c_real,
-                a_comp, b_comp, c_comp, d_comp,
-                x, yvar  // Note: this is the measurement _variance_
-            );
-        
-          // see l.186-192 in celerite.py
-          double logdet, diffs, llike;
-          logdet = solver.log_determinant();
-          diffs = solver.dot_solve(dy); 
-          llike = -0.5 * (diffs + logdet); 
-        
-          xisqtemp += diffs+logdet;
-         
-#if (demcmc_compile==0)
-          printf("diffs=%lf\n", diffs);
-          printf("logdet=%lf\n", logdet);
-          printf("llike=%lf\n", llike);
-      
-          VectorXd prediction = solver.predict(dy, x);
-          char tmtefstr[1000];
-          strcpy(tmtefstr, "rv_");
-          strcat(tmtefstr, OUTSTR);
-          strcat(tmtefstr, ".gp_rvout");
-          FILE *tmtef;
-          tmtef = fopen(tmtefstr, "a");
-          long ijk;
-          for (ijk=0; ijk<maxil; ijk++) {
-            fprintf(tmtef, "%.12lf \n", prediction[ijk]);
-          }
-          fclose(tmtef);// = openf(tmtstr,"w");
-       
-#endif        
-          free(yvarp);
-          free(diffys);
-        }
-      }
+    }
 
-      if (TTVCHISQ) {
-        double *newelistttv;
-        if (TTVJITTERFLAG) {
-          long kj;
-          long maxkj = (long) ttvts[0][0];
-          newelistttv = malloc((maxkj+1)*sofd);
-          newelistttv[0] = (double) maxkj;
-          for (kj=0; kj<maxkj; kj++) {
-            int jitterindex = (kj < NTTV[0][0]) ? 0 : 1 ; 
-            double sigmajitter = p0local[pperwalker*i+npl*pperplan+5+RVJITTERTOT+jitterindex];
-            double quadsum = sigmajitter*sigmajitter + ttvts[3][1+kj]*ttvts[3][1+kj];
-            // check that the index on ttvts should be 2
-            xisqtemp += log(quadsum / (ttvts[3][1+kj]*ttvts[3][1+kj]) );
-            newelistttv[1+kj] = sqrt(quadsum);
-          }
-          ttvts[3] = newelistttv;
+    if (TTVCHISQ) {
+      double *newelistttv;
+      if (TTVJITTERFLAG) {
+        long kj;
+        long maxkj = (long) ttvts[0][0];
+        newelistttv = malloc((maxkj+1)*sofd);
+        newelistttv[0] = (double) maxkj;
+        for (kj=0; kj<maxkj; kj++) {
+          int jitterindex = (kj < NTTV[0][0]) ? 0 : 1 ; 
+          double sigmajitter = p0local[pperwalker*i+npl*pperplan+5+RVJITTERTOT+jitterindex];
+          double quadsum = sigmajitter*sigmajitter + ttvts[3][1+kj]*ttvts[3][1+kj];
+          // check that the index on ttvts should be 2
+          xisqtemp += log(quadsum / (ttvts[3][1+kj]*ttvts[3][1+kj]) );
+          newelistttv[1+kj] = sqrt(quadsum);
         }
-        double *ttvdev = devoerr(ttvts);
-        long maxil = (long) ttvdev[0];
-        for (il=0; il<maxil; il++) xisqtemp += ttvdev[il+1]*ttvdev[il+1];
-        free (ttvdev);
-        if (TTVJITTERFLAG) {
-          free(newelistttv);
-        }
+        ttvts[3] = newelistttv;
       }
+      double *ttvdev = devoerr(ttvts);
+      long maxil = (long) ttvdev[0];
+      for (il=0; il<maxil; il++) xisqtemp += ttvdev[il+1]*ttvdev[il+1];
+      free (ttvdev);
+      if (TTVJITTERFLAG) {
+        free(newelistttv);
+      }
+    }
 
 
-      double photoradius;
-      photoradius = p0local[i*pperwalker+npl*pperplan+1]; 
-      double photomass;
-      photomass = p0local[i*pperwalker+npl*pperplan+0]; 
-      double* evector; 
-      evector = malloc(npl*sofd);
-      if (ECUTON || EPRIOR) {
-        if (SQRTE) {
-          int i0;
-          for (i0=0; i0<npl; i0++) {
-            evector[i0] = pow(sqrt( pow(p0local[i*pperwalker+i0*pperplan+2], 2) + pow(p0local[i*pperwalker+i0*pperplan+3], 2) ), 2);
-          }
-        } else {
-          int i0;
-          for (i0=0; i0<npl; i0++) {
-            evector[i0] = sqrt( pow(p0local[i*pperwalker+i0*pperplan+2], 2) + pow(p0local[i*pperwalker+i0*pperplan+3], 2) );
-          }
-        }
-      }
-      if (SPECTROSCOPY) {
-        if (photoradius > SPECRADIUS) xisqtemp += pow( (photoradius - SPECRADIUS) / SPECERRPOS, 2 );
-        else xisqtemp += pow( (photoradius - SPECRADIUS) / SPECERRNEG, 2 );
-      }
-      if (MASSSPECTROSCOPY) {
-        if (photomass > SPECMASS) xisqtemp += pow( (photomass - SPECMASS) / MASSSPECERRPOS, 2 );
-        else xisqtemp += pow( (photomass - SPECMASS) / MASSSPECERRNEG, 2 );
-      }
-      if (INCPRIOR) {
+    double photoradius;
+    photoradius = p0local[i*pperwalker+npl*pperplan+1]; 
+    double photomass;
+    photomass = p0local[i*pperwalker+npl*pperplan+0]; 
+    double* evector; 
+    evector = malloc(npl*sofd);
+    if (ECUTON || EPRIOR) {
+      if (SQRTE) {
         int i0;
         for (i0=0; i0<npl; i0++) {
-          xisqtemp += -2.0*log( sin(p0local[i*pperwalker+i0*pperplan+4] *M_PI/180.) ); 
+          evector[i0] = pow(sqrt( pow(p0local[i*pperwalker+i0*pperplan+2], 2) + pow(p0local[i*pperwalker+i0*pperplan+3], 2) ), 2);
         }
-      }
-      if (EPRIOR) {
+      } else {
         int i0;
-        for (i0=0; i0<NPL; i0++) {
-          if (EPRIORV[i0]) {
-            double priorprob;
-            if (EPRIOR==1) {
-              priorprob = rayleighpdf(evector[i0]);
-            } else if (EPRIOR==2) {
-              priorprob = normalpdf(evector[i0]);
-            }
-            xisqtemp += -2.0*log( priorprob );
-          }
+        for (i0=0; i0<npl; i0++) {
+          evector[i0] = sqrt( pow(p0local[i*pperwalker+i0*pperplan+2], 2) + pow(p0local[i*pperwalker+i0*pperplan+3], 2) );
         }
       }
+    }
+    if (SPECTROSCOPY) {
+      if (photoradius > SPECRADIUS) xisqtemp += pow( (photoradius - SPECRADIUS) / SPECERRPOS, 2 );
+      else xisqtemp += pow( (photoradius - SPECRADIUS) / SPECERRNEG, 2 );
+    }
+    if (MASSSPECTROSCOPY) {
+      if (photomass > SPECMASS) xisqtemp += pow( (photomass - SPECMASS) / MASSSPECERRPOS, 2 );
+      else xisqtemp += pow( (photomass - SPECMASS) / MASSSPECERRNEG, 2 );
+    }
+    if (INCPRIOR) {
+      int i0;
+      for (i0=0; i0<npl; i0++) {
+        xisqtemp += -2.0*log( sin(p0local[i*pperwalker+i0*pperplan+4] *M_PI/180.) ); 
+      }
+    }
+    if (EPRIOR) {
+      int i0;
+      for (i0=0; i0<NPL; i0++) {
+        if (EPRIORV[i0]) {
+          double priorprob;
+          if (EPRIOR==1) {
+            priorprob = rayleighpdf(evector[i0]);
+          } else if (EPRIOR==2) {
+            priorprob = normalpdf(evector[i0]);
+          }
+          xisqtemp += -2.0*log( priorprob );
+        }
+      }
+    }
 
-      celeritefail:
+    celeritefail:
 
-      xisq0[i] = xisqtemp;
+    xisq0[i] = xisqtemp;
  
-      free(evector);
+    free(evector);
 
-      free(int_in[0][0]);
-      free(int_in[0]);
-      free(int_in[1][0]);
-      free(int_in[1]);
-      int i1;
-      for(i1=0; i1<npl+1; i1++) free(int_in[2][i1]);
-      free(int_in[2]);
-      free(int_in[3][0]);
-      free(int_in[3]);
-      free(int_in);
-  
-      //Only 1 array is malloced!
-      free(flux_rvs[0][2]);
-      if (RVS) {
-        free(flux_rvs[1][2]);
-        if (RVJITTERFLAG) {
-          free(newelist);
-        }
-      }
-  
-      free(flux_rvs[0]);
-      free(flux_rvs[1]);
-      free(flux_rvs);
-  
-      free(dev);
-  
-  
-    }
-  } else { //if NTEMPS:
-    for (i=0; i<nwalkers; i++) {
-      for (w=0; w<NTEMPS; w++) {
-        double ***int_in = dsetup2(&p0localN[w][pperwalker*i], npl);
-        double ***flux_rvs; 
-        if (MULTISTAR) flux_rvs = dpintegrator_multi(int_in, tfe, tve, cadencelist);
-        else flux_rvs = dpintegrator_single(int_in, tfe, tve, nte, cadencelist);
-        double **ttvts = flux_rvs[2];
-        double **flux = flux_rvs[0];
-        double **radvs = flux_rvs[1];
-        double *dev = devoerr(flux);
-        double xisqtemp = 0;
-        long il;
-        long maxil = (long) dev[0];
-        if (! CELERITE) { 
-          for (il=0; il<maxil; il++) xisqtemp += dev[il+1]*dev[il+1];
-        } else { // if celerite
-          double *xs = flux_rvs[0][0];
-              long maxil = (long) xs[0];
-          double *trueys = flux_rvs[0][1];
-          double *modelys = flux_rvs[0][2];
-          double *es = flux_rvs[0][3];
-          double *diffys = malloc(sofd*maxil);
-          for (il=0; il<maxil; il++) { 
-             diffys[il] = trueys[il+1]-modelys[il+1];
-          }
-          double *yvarp = malloc(sofd*maxil);
-          for (il=0; il<maxil; il++) { 
-             yvarp[il] = es[il+1]*es[il+1]; 
-          }
-          double *xp = &xs[1]; 
-          
-          int j_real = 0;
-          int j_complex;
-          double jitter, k1, k2, k3, S0, w0, Q;
-          jitter = p0localN[w][pperwalker*i+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+0];// p[npl][5+RVJITTERTOT+TTVJITTERTOT+0];
-          S0 = p0localN[w][pperwalker*i+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+1]; //p[npl][5+RVJITTERTOT+TTVJITTERTOT+1];
-          w0 = p0localN[w][pperwalker*i+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+2]; //p[npl][5+RVJITTERTOT+TTVJITTERTOT+2];
-          Q = p0localN[w][pperwalker*i+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+3];//p[npl][5+RVJITTERTOT+TTVJITTERTOT+3];
-          if (Q >= 0.5) {
-            j_complex = 1;
-          } else {
-            j_complex = 2;
-          }
-          VectorXd a_real(j_real),
-                  c_real(j_real),
-                  a_comp(j_complex),
-                  b_comp(j_complex),
-                  c_comp(j_complex),
-                  d_comp(j_complex);
-          if (Q >= 0.5) {
-            k1 = S0*w0*Q;
-            k2 = sqrt(4.*Q*Q - 1.);
-            k3 = w0/(2.*Q);
-            a_comp << k1;
-            b_comp << k1/k2;
-            c_comp << k3;
-            d_comp << k3*k2;
-          } else {
-            j_complex = 2;
-            k1 = 0.5*S0*w0*Q;
-            k2 = sqrt(1. - 4.*Q*Q);
-            k3 = w0/(2.*Q);
-            a_comp << k1*(1. + 1./k2), k1*(1. - 1./k2);
-            b_comp << 0., 0.;
-            c_comp << k3*(1. - k2), k3*(1. + k2);
-            d_comp << 0., 0.;
-          }
-        
-        
-          VectorXd x = VectorXd::Map(xp, maxil);
-          VectorXd yvar = VectorXd::Map(yvarp, maxil);
-          VectorXd dy = VectorXd::Map(diffys, maxil);
-        
-          celerite::solver::CholeskySolver<double> solver;
-          solver.compute(
-                jitter,
-                a_real, c_real,
-                a_comp, b_comp, c_comp, d_comp,
-                x, yvar  // Note: this is the measurement _variance_
-            );
-        
-          // see l.186-192 in celerite.py
-          double logdet, diffs, llike;
-          logdet = solver.log_determinant();
-          diffs = solver.dot_solve(dy); 
-          llike = -0.5 * (diffs + logdet); 
-        
-          xisqtemp = diffs+logdet;
-         
-          free(yvarp);
-          free(diffys);
-        }
-        double *newelist;
-  
-        if (RVS) {
-          if (! RVCELERITE) { 
-            double *newelist;
-            if (RVJITTERFLAG) {
-              long kj;
-              long maxkj = (long) tve[0][0]; 
-              newelist=malloc((maxkj+1)*sofd);
-              newelist[0] = (double) maxkj;
-              for (kj=0; kj<maxkj; kj++) {
-                int jitterindex = (int) tve[3][1+kj]*NTELESCOPES + tve[4][1+kj];
-                double sigmajitter = p0localN[w][pperwalker*i+npl*pperplan+5+jitterindex]*MPSTOAUPD;
-                double quadsum = sigmajitter*sigmajitter + radvs[3][1+kj]*radvs[3][1+kj];
-                // double check this... factor of 1/2
-                xisqtemp += log(quadsum / (radvs[3][1+kj]*radvs[3][1+kj]) );
-                newelist[1+kj] = sqrt( quadsum );
-              }
-              radvs[3] = newelist;
-            }
-    
-            double *rvdev = devoerr(radvs);
-            long maxil = (long) rvdev[0];
-            for (il=0; il<maxil; il++) xisqtemp += rvdev[il+1]*rvdev[il+1];
-            free(rvdev);
-  
-          } else { // if rvcelerite
-            double *xs = flux_rvs[1][0];
-            long maxil = (long) xs[0];
-            double *trueys = flux_rvs[1][1];
-            double *modelys = flux_rvs[1][2];
-            double *es = flux_rvs[1][3];
-            double *diffys = malloc(sofd*maxil);
-            for (il=0; il<maxil; il++) { 
-               diffys[il] = trueys[il+1]-modelys[il+1];
-            }
-            double *yvarp = malloc(sofd*maxil);
-            for (il=0; il<maxil; il++) { 
-               yvarp[il] = es[il+1]*es[il+1]; 
-            }
-            double *xp = &xs[1]; 
-            
-            int j_real = 0;
-            int j_complex;
-            double jitter, k1, k2, k3, S0, w0, Q;
-            jitter = p0localN[w][pperwalker*i+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+0];// p[npl][5+RVJITTERTOT+TTVJITTERTOT+0];
-            S0 = p0localN[w][pperwalker*i+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+1]; //p[npl][5+RVJITTERTOT+TTVJITTERTOT+1];
-            w0 = p0localN[w][pperwalker*i+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+2]; //p[npl][5+RVJITTERTOT+TTVJITTERTOT+2];
-            Q = p0localN[w][pperwalker*i+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+3];//p[npl][5+RVJITTERTOT+TTVJITTERTOT+3];
-            if (Q >= 0.5) {
-              j_complex = 1;
-            } else {
-              j_complex = 2;
-            }
-            VectorXd a_real(j_real),
-                    c_real(j_real),
-                    a_comp(j_complex),
-                    b_comp(j_complex),
-                    c_comp(j_complex),
-                    d_comp(j_complex);
-            if (Q >= 0.5) {
-              k1 = S0*w0*Q;
-              k2 = sqrt(4.*Q*Q - 1.);
-              k3 = w0/(2.*Q);
-              a_comp << k1;
-              b_comp << k1/k2;
-              c_comp << k3;
-              d_comp << k3*k2;
-            } else {
-              j_complex = 2;
-              k1 = 0.5*S0*w0*Q;
-              k2 = sqrt(1. - 4.*Q*Q);
-              k3 = w0/(2.*Q);
-              a_comp << k1*(1. + 1./k2), k1*(1. - 1./k2);
-              b_comp << 0., 0.;
-              c_comp << k3*(1. - k2), k3*(1. + k2);
-              d_comp << 0., 0.;
-            }
-         
-          
-            VectorXd x = VectorXd::Map(xp, maxil);
-            VectorXd yvar = VectorXd::Map(yvarp, maxil);
-            VectorXd dy = VectorXd::Map(diffys, maxil);
-          
-            celerite::solver::CholeskySolver<double> solver;
-            solver.compute(
-                  jitter,
-                  a_real, c_real,
-                  a_comp, b_comp, c_comp, d_comp,
-                  x, yvar  // Note: this is the measurement _variance_
-              );
-          
-            // see l.186-192 in celerite.py
-            double logdet, diffs, llike;
-            logdet = solver.log_determinant();
-            diffs = solver.dot_solve(dy); 
-            llike = -0.5 * (diffs + logdet); 
-          
-            xisqtemp += diffs+logdet;
-           
-  #if (demcmc_compile==0)
-            printf("a+comp=%lf\n", a_comp[0]);
-            printf("b+comp=%lf\n", b_comp[0]);
-            printf("c+comp=%lf\n", c_comp[0]);
-            printf("d+comp=%lf\n", d_comp[0]);
-            printf("diffs=%lf\n", diffs);
-            printf("logdet=%lf\n", logdet);
-            printf("llike=%lf\n", llike);
-        
-            VectorXd prediction = solver.predict(dy, x);
-            char tmtefstr[1000];
-            strcpy(tmtefstr, "rv_");
-            strcat(tmtefstr, OUTSTR);
-            strcat(tmtefstr, ".gp_rvout");
-            FILE *tmtef;
-            tmtef = fopen(tmtefstr, "a");
-            long ijk;
-            for (ijk=0; ijk<maxil; ijk++) {
-              fprintf(tmtef, "%.12lf \n", prediction[ijk]);
-            }
-            fclose(tmtef);// = openf(tmtstr,"w"); 
-  #endif      
-          
-            free(yvarp);
-            free(diffys);
-        
-          }
-        }
-        if (TTVCHISQ) {
-          double *newelistttv;
-          if (TTVJITTERFLAG) {
-            long kj;
-            long maxkj = (long) ttvts[0][0];
-            newelistttv = malloc((maxkj+1)*sofd);
-            newelistttv[0] = (double) maxkj;
-            for (kj=0; kj<maxkj; kj++) {
-              int jitterindex = (kj < NTTV[0][0]) ? 0 : 1 ; 
-              //double sigmajitter = p[npl][5+RVJITTERTOT+jitterindex];
-              double sigmajitter = p0localN[w][pperwalker*i+npl*pperplan+5+RVJITTERTOT+jitterindex];
-              double quadsum = sigmajitter*sigmajitter + ttvts[3][1+kj]*ttvts[3][1+kj];
-              // check that the index on ttvts should be 2
-              xisqtemp += log(quadsum / (ttvts[3][1+kj]*ttvts[3][1+kj]) );
-              newelistttv[1+kj] = sqrt(quadsum);
-            }
-            ttvts[3] = newelistttv;
-          }
-          
-          double *ttvdev = devoerr(ttvts);
-          long maxil = (long) ttvdev[0];
-          for (il=0; il<maxil; il++) xisqtemp += ttvdev[il+1]*ttvdev[il+1];
-          free (ttvdev);
-          if (TTVJITTERFLAG) {
-            free(newelistttv);
-          }
-  
-        }
-        double photoradius = p0localN[w][i*pperwalker+npl*pperplan+1];
-        double photomass = p0localN[w][i*pperwalker+npl*pperplan+0];
-        double* evector = malloc(npl*sofd);
-        if (ECUTON || EPRIOR) {
-          if (SQRTE) {
-            int i0;
-            for (i0=0; i0<npl; i0++) {
-              evector[i0] = pow(sqrt( pow(p0localN[w][i*pperwalker+i0*pperplan+2], 2) + pow(p0localN[w][i*pperwalker+i0*pperplan+3], 2) ), 2);
-            }
-          } else {
-            int i0;
-            for (i0=0; i0<npl; i0++) {
-              evector[i0] = sqrt( pow(p0localN[w][i*pperwalker+i0*pperplan+2], 2) + pow(p0localN[w][i*pperwalker+i0*pperplan+3], 2) );
-            }
-          }
-        }
-        if (SPECTROSCOPY) {
-          if (photoradius > SPECRADIUS) xisqtemp += pow( (photoradius - SPECRADIUS) / SPECERRPOS, 2 );
-          else xisqtemp += pow( (photoradius - SPECRADIUS) / SPECERRNEG, 2 );
-        }
-        if (MASSSPECTROSCOPY) {
-          if (photomass > SPECMASS) xisqtemp += pow( (photomass - SPECMASS) / MASSSPECERRPOS, 2 );
-          else xisqtemp += pow( (photomass - SPECMASS) / MASSSPECERRNEG, 2 );
-        }
-        if (INCPRIOR) {
-                int i0;
-          for (i0=0; i0<npl; i0++) {
-            xisqtemp += -2.0*log( sin(p0localN[w][i*pperwalker+i0*pperplan+4] * M_PI/180.)); 
-          }
-        }
-        if (EPRIOR) {
-          int i0;
-          for (i0=0; i0<NPL; i0++) {
-            if (EPRIORV[i0]) {
-              double priorprob;
-              if (EPRIOR==1) {
-                priorprob = rayleighpdf(evector[i0]);
-              } else if (EPRIOR==2) {
-                priorprob = normalpdf(evector[i0]);
-              }
-              xisqtemp += -2.0*log( priorprob );
-            }
-          }
-        }
-        xisq0N[w][i] = xisqtemp;
-        free(evector);
-    
-        free(int_in[0][0]);
-        free(int_in[0]);
-        free(int_in[1][0]);
-        free(int_in[1]);
-        int i1;
-        for(i1=0; i1<npl+1; i1++) free(int_in[2][i1]);
-        free(int_in[2]);
-        free(int_in[3][0]);
-        free(int_in[3]);
-        free(int_in);
-    
-        //Only 1 array is malloced!
-        free(flux_rvs[0][2]);
-        if (RVS) {
-          free(flux_rvs[1][2]);
-          if (RVJITTERFLAG) {
-            free(newelist);
-          }
-        }
-    
-        free(flux_rvs[0]);
-        free(flux_rvs[1]);
-        free(flux_rvs);
-    
-        free(dev);
+    free(int_in[0][0]);
+    free(int_in[0]);
+    free(int_in[1][0]);
+    free(int_in[1]);
+    int i1;
+    for(i1=0; i1<npl+1; i1++) free(int_in[2][i1]);
+    free(int_in[2]);
+    free(int_in[3][0]);
+    free(int_in[3]);
+    free(int_in);
+
+    //Only 1 array is malloced!
+    free(flux_rvs[0][2]);
+    if (RVS) {
+      free(flux_rvs[1][2]);
+      if (RVJITTERFLAG) {
+        free(newelist);
       }
     }
+
+    free(flux_rvs[0]);
+    free(flux_rvs[1]);
+    free(flux_rvs);
+
+    free(dev);
+
+
   }
 
   
@@ -7655,28 +7173,6 @@ printf("kih = %i\n", ki);
   double **p0globalN;
   double **xisq0globalN;
 
-  if (NTEMPS) {
-    acceptanceN = malloc(NTEMPS*sofis);
-    acceptanceglobalN = malloc(NTEMPS*sofis);
-    p0globalN = malloc(NTEMPS*sofds);
-    xisq0globalN = malloc(NTEMPS*sofds);
-    for (w=0; w<NTEMPS; w++) {
-      acceptanceN[w] = malloc(nwalkers*sofi);
-      acceptanceglobalN[w] = malloc(nwalkers*sofi);
-      p0globalN[w] = malloc(totalparams*sofd);
-      xisq0globalN[w] = malloc(nwalkers*sofd);
-    }
-  }
-
-  double *beta;
-  if (NTEMPS) {
-    beta = malloc(NTEMPS*sofd);
-    beta[0] = 1.0;
-    for (w=1; w<NTEMPS; w++) {
-      //beta[w] = beta[w-1] / sqrt(2.0);
-      beta[w] = beta[w-1] / 2.;
-    }
-  }
 
   // loop over generations
   unsigned long nwcore = (unsigned long) RANK;
@@ -7711,74 +7207,47 @@ printf("kih = %i\n", ki);
     // This loops allows you to have more walkers than cores
     for (nw=nwinit; nw < nwfin; nw++) {
   
-      if (! NTEMPS) {
-        memcpy(p0localcopy, &p0local[nw*pperwalker], pperwalker*sofd);
+      memcpy(p0localcopy, &p0local[nw*pperwalker], pperwalker*sofd);
+
+      acceptance[nw] = 1;
   
-        acceptance[nw] = 1;
-    
-        unsigned long nw1;
-        do nw1 = gsl_rng_uniform_int(rnw, nwalkersul); while (nw1 == nw); 
-        unsigned long nw2;
-        do nw2 = gsl_rng_uniform_int(rnw, nwalkersul); while (nw2 == nw || nw2 == nw1); 
-    
-        int notallowed=0;
-    
-        int ip;
-        if (bimodf) {
-          if ( jj % bimodf == 0) {
-            for (ip=0; ip<pstar; ip++) {
-              p0local[nw*pperwalker+npl*pperplan+ip] += (gamma+(1-gamma)*bimodlist[npl*pperplan+ip])*(p0local[nw1*pperwalker+npl*pperplan+ip]-p0local[nw2*pperwalker+npl*pperplan+ip])*(1-parfix[npl*pperplan+ip])*(1+(1+(gamma-1)*bimodlist[npl*pperplan+ip])*gsl_ran_gaussian(rnw, 0.1));
-            }
-            if ( DIGT0 && (p0local[nw*pperwalker+npl*pperplan+4] < 0.0) ) notallowed=1;
-            for (ip=0; ip<npl; ip++) {
-              int ii;
-              for (ii=0; ii<pperplan; ii++) {
-                p0local[nw*pperwalker+ip*pperplan+ii] += (gamma+(1-gamma)*bimodlist[ip*pperplan+ii])*(p0local[nw1*pperwalker+ip*pperplan+ii]-p0local[nw2*pperwalker+ip*pperplan+ii])*(1-parfix[ip*pperplan+ii])*(1+(1+(gamma-1)*bimodlist[ip*pperplan+ii])*gsl_ran_gaussian(rnw, 0.1));
-              }
-              // make sure i and Omega angles are not cycling through:
-              if ( p0local[nw*pperwalker+ip*pperplan+4] < 0.0 || p0local[nw*pperwalker+ip*pperplan+4] > 180.0 ) notallowed=1;
-              if ( p0local[nw*pperwalker+ip*pperplan+5] < -180.0 || p0local[nw*pperwalker+ip*pperplan+5] > 180.0 ) notallowed=1;
-              // make sure i>=90
-              if ( IGT90 && (p0local[nw*pperwalker+ip*pperplan+4] < 90.0) ) notallowed=1;
-              // make sure m>=0
-              if ( MGT0 && (p0local[nw*pperwalker+ip*pperplan+6] < 0.0) ) notallowed=1;
-              //make sure density is allowed
-              if (DENSITYCUTON) {
-                double massg = p0local[nw*pperwalker+ip*pperplan+6] / MSOMJ * MSUNGRAMS; 
-                double radcm = p0local[nw*pperwalker+npl*pperplan+1] * p0local[nw*pperwalker+ip*pperplan+7] * RSUNCM;
-                double rhogcc = massg / (4./3.*M_PI*radcm*radcm*radcm);
-                if (rhogcc > MAXDENSITY[ip]) notallowed=1;
-              }
-            } 
-          } else {
-            for (ip=0; ip<pstar; ip++) {
-              p0local[nw*pperwalker+npl*pperplan+ip] += (gamma+(1-gamma)*bimodlist[npl*pperplan+ip])*(p0local[nw1*pperwalker+npl*pperplan+ip]-p0local[nw2*pperwalker+npl*pperplan+ip])*(1-parfix[npl*pperplan+ip])*(1+(1+(gamma-1)*bimodlist[npl*pperplan+ip])*gsl_ran_gaussian(rnw, 0.1));
-            }
-            if ( DIGT0 && (p0local[nw*pperwalker+npl*pperplan+4] < 0.0) ) notallowed=1;
-            for (ip=0; ip<npl; ip++) {
-              int ii;
-              for (ii=0; ii<pperplan; ii++) {
-                p0local[nw*pperwalker+ip*pperplan+ii] += gamma*(p0local[nw1*pperwalker+ip*pperplan+ii]-p0local[nw2*pperwalker+ip*pperplan+ii])*(1-parfix[ip*pperplan+ii])*(1+gsl_ran_gaussian(rnw, 0.1));
-              }
-              // make sure i and Omega angles are not cycling through:
-              if ( p0local[nw*pperwalker+ip*pperplan+4] < 0.0 || p0local[nw*pperwalker+ip*pperplan+4] > 180.0 ) notallowed=1;
-              if ( p0local[nw*pperwalker+ip*pperplan+5] < -180.0 || p0local[nw*pperwalker+ip*pperplan+5] > 180.0 ) notallowed=1;
-              // make sure i>=90
-              if ( IGT90 && (p0local[nw*pperwalker+ip*pperplan+4] < 90.0) ) notallowed=1;
-              // make sure m>=0
-              if ( MGT0 && (p0local[nw*pperwalker+ip*pperplan+6] < 0.0) ) notallowed=1;
-              //make sure density is allowed
-              if (DENSITYCUTON) {
-                double massg = p0local[nw*pperwalker+ip*pperplan+6] / MSOMJ * MSUNGRAMS; 
-                double radcm = p0local[nw*pperwalker+npl*pperplan+1] * p0local[nw*pperwalker+ip*pperplan+7] * RSUNCM;
-                double rhogcc = massg / (4./3.*M_PI*radcm*radcm*radcm);
-                if (rhogcc > MAXDENSITY[ip]) notallowed=1;
-              }
-            } 
+      unsigned long nw1;
+      do nw1 = gsl_rng_uniform_int(rnw, nwalkersul); while (nw1 == nw); 
+      unsigned long nw2;
+      do nw2 = gsl_rng_uniform_int(rnw, nwalkersul); while (nw2 == nw || nw2 == nw1); 
+  
+      int notallowed=0;
+  
+      int ip;
+      if (bimodf) {
+        if ( jj % bimodf == 0) {
+          for (ip=0; ip<pstar; ip++) {
+            p0local[nw*pperwalker+npl*pperplan+ip] += (gamma+(1-gamma)*bimodlist[npl*pperplan+ip])*(p0local[nw1*pperwalker+npl*pperplan+ip]-p0local[nw2*pperwalker+npl*pperplan+ip])*(1-parfix[npl*pperplan+ip])*(1+(1+(gamma-1)*bimodlist[npl*pperplan+ip])*gsl_ran_gaussian(rnw, 0.1));
           }
+          if ( DIGT0 && (p0local[nw*pperwalker+npl*pperplan+4] < 0.0) ) notallowed=1;
+          for (ip=0; ip<npl; ip++) {
+            int ii;
+            for (ii=0; ii<pperplan; ii++) {
+              p0local[nw*pperwalker+ip*pperplan+ii] += (gamma+(1-gamma)*bimodlist[ip*pperplan+ii])*(p0local[nw1*pperwalker+ip*pperplan+ii]-p0local[nw2*pperwalker+ip*pperplan+ii])*(1-parfix[ip*pperplan+ii])*(1+(1+(gamma-1)*bimodlist[ip*pperplan+ii])*gsl_ran_gaussian(rnw, 0.1));
+            }
+            // make sure i and Omega angles are not cycling through:
+            if ( p0local[nw*pperwalker+ip*pperplan+4] < 0.0 || p0local[nw*pperwalker+ip*pperplan+4] > 180.0 ) notallowed=1;
+            if ( p0local[nw*pperwalker+ip*pperplan+5] < -180.0 || p0local[nw*pperwalker+ip*pperplan+5] > 180.0 ) notallowed=1;
+            // make sure i>=90
+            if ( IGT90 && (p0local[nw*pperwalker+ip*pperplan+4] < 90.0) ) notallowed=1;
+            // make sure m>=0
+            if ( MGT0 && (p0local[nw*pperwalker+ip*pperplan+6] < 0.0) ) notallowed=1;
+            //make sure density is allowed
+            if (DENSITYCUTON) {
+              double massg = p0local[nw*pperwalker+ip*pperplan+6] / MSOMJ * MSUNGRAMS; 
+              double radcm = p0local[nw*pperwalker+npl*pperplan+1] * p0local[nw*pperwalker+ip*pperplan+7] * RSUNCM;
+              double rhogcc = massg / (4./3.*M_PI*radcm*radcm*radcm);
+              if (rhogcc > MAXDENSITY[ip]) notallowed=1;
+            }
+          } 
         } else {
           for (ip=0; ip<pstar; ip++) {
-            p0local[nw*pperwalker+npl*pperplan+ip] += gamma*(p0local[nw1*pperwalker+npl*pperplan+ip]-p0local[nw2*pperwalker+npl*pperplan+ip])*(1-parfix[npl*pperplan+ip])*(1+gsl_ran_gaussian(rnw, 0.1));
+            p0local[nw*pperwalker+npl*pperplan+ip] += (gamma+(1-gamma)*bimodlist[npl*pperplan+ip])*(p0local[nw1*pperwalker+npl*pperplan+ip]-p0local[nw2*pperwalker+npl*pperplan+ip])*(1-parfix[npl*pperplan+ip])*(1+(1+(gamma-1)*bimodlist[npl*pperplan+ip])*gsl_ran_gaussian(rnw, 0.1));
           }
           if ( DIGT0 && (p0local[nw*pperwalker+npl*pperplan+4] < 0.0) ) notallowed=1;
           for (ip=0; ip<npl; ip++) {
@@ -7802,90 +7271,220 @@ printf("kih = %i\n", ki);
             }
           } 
         }
-        double photoradius = p0local[nw*pperwalker+npl*pperplan+1]; 
-        double photomass = p0local[nw*pperwalker+npl*pperplan+0]; 
-        
-        // check that RVJITTER >= 0
-        if (RVS) {
-          if (RVJITTERFLAG) {
-            int ki;
-            for (ki=0; ki<RVJITTERTOT; ki++) {
-              if (p0local[nw*pperwalker+npl*pperplan+(5+ki)] < 0.0) {
-                notallowed=1;
-              }
+      } else {
+        for (ip=0; ip<pstar; ip++) {
+          p0local[nw*pperwalker+npl*pperplan+ip] += gamma*(p0local[nw1*pperwalker+npl*pperplan+ip]-p0local[nw2*pperwalker+npl*pperplan+ip])*(1-parfix[npl*pperplan+ip])*(1+gsl_ran_gaussian(rnw, 0.1));
+        }
+        if ( DIGT0 && (p0local[nw*pperwalker+npl*pperplan+4] < 0.0) ) notallowed=1;
+        for (ip=0; ip<npl; ip++) {
+          int ii;
+          for (ii=0; ii<pperplan; ii++) {
+            p0local[nw*pperwalker+ip*pperplan+ii] += gamma*(p0local[nw1*pperwalker+ip*pperplan+ii]-p0local[nw2*pperwalker+ip*pperplan+ii])*(1-parfix[ip*pperplan+ii])*(1+gsl_ran_gaussian(rnw, 0.1));
+          }
+          // make sure i and Omega angles are not cycling through:
+          if ( p0local[nw*pperwalker+ip*pperplan+4] < 0.0 || p0local[nw*pperwalker+ip*pperplan+4] > 180.0 ) notallowed=1;
+          if ( p0local[nw*pperwalker+ip*pperplan+5] < -180.0 || p0local[nw*pperwalker+ip*pperplan+5] > 180.0 ) notallowed=1;
+          // make sure i>=90
+          if ( IGT90 && (p0local[nw*pperwalker+ip*pperplan+4] < 90.0) ) notallowed=1;
+          // make sure m>=0
+          if ( MGT0 && (p0local[nw*pperwalker+ip*pperplan+6] < 0.0) ) notallowed=1;
+          //make sure density is allowed
+          if (DENSITYCUTON) {
+            double massg = p0local[nw*pperwalker+ip*pperplan+6] / MSOMJ * MSUNGRAMS; 
+            double radcm = p0local[nw*pperwalker+npl*pperplan+1] * p0local[nw*pperwalker+ip*pperplan+7] * RSUNCM;
+            double rhogcc = massg / (4./3.*M_PI*radcm*radcm*radcm);
+            if (rhogcc > MAXDENSITY[ip]) notallowed=1;
+          }
+        } 
+      }
+      double photoradius = p0local[nw*pperwalker+npl*pperplan+1]; 
+      double photomass = p0local[nw*pperwalker+npl*pperplan+0]; 
+      
+      // check that RVJITTER >= 0
+      if (RVS) {
+        if (RVJITTERFLAG) {
+          int ki;
+          for (ki=0; ki<RVJITTERTOT; ki++) {
+            if (p0local[nw*pperwalker+npl*pperplan+(5+ki)] < 0.0) {
+              notallowed=1;
             }
           }
         }
-        
-        // check that celerite terms >= 0
-        if (CELERITE) {
-            int ki;
-            for (ki=0; ki<NCELERITE; ki++) {
-              if (p0local[nw*pperwalker+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+ki] < 0.0) {
-                notallowed=1;
-              }
-            }
-        }
-        if (RVCELERITE) {
-            int ki;
-            for (ki=0; ki<NRVCELERITE; ki++) {
-              if (p0local[nw*pperwalker+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+CELERITE*4+ki] < 0.0) {
-                notallowed=1;
-              }
-            }
-        }
-    
-        double* evector = malloc(npl*sofd);
-        if (ECUTON || EPRIOR) {
-          if (SQRTE) {
-            int i0;
-            for (i0=0; i0<npl; i0++) {
-              evector[i0] = pow(sqrt( pow(p0local[nw*pperwalker+i0*pperplan+2], 2) + pow(p0local[nw*pperwalker+i0*pperplan+3], 2) ), 2);
-            }
-          } else {
-            int i0;
-            for (i0=0; i0<npl; i0++) {
-              evector[i0] = sqrt( pow(p0local[nw*pperwalker+i0*pperplan+2], 2) + pow(p0local[nw*pperwalker+i0*pperplan+3], 2) );
+      }
+      
+      // check that celerite terms >= 0
+      if (CELERITE) {
+          int ki;
+          for (ki=0; ki<NCELERITE; ki++) {
+            if (p0local[nw*pperwalker+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+ki] < 0.0) {
+              notallowed=1;
             }
           }
-        }
-        // make sure e_d cos  w_d is within its range
-        if (ECUTON) {
-          double* emax = EMAX;
+      }
+      if (RVCELERITE) {
+          int ki;
+          for (ki=0; ki<NRVCELERITE; ki++) {
+            if (p0local[nw*pperwalker+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+CELERITE*4+ki] < 0.0) {
+              notallowed=1;
+            }
+          }
+      }
+  
+      double* evector = malloc(npl*sofd);
+      if (ECUTON || EPRIOR) {
+        if (SQRTE) {
           int i0;
           for (i0=0; i0<npl; i0++) {
-            if (evector[i0] > emax[i0] ) notallowed=1;
+            evector[i0] = pow(sqrt( pow(p0local[nw*pperwalker+i0*pperplan+2], 2) + pow(p0local[nw*pperwalker+i0*pperplan+3], 2) ), 2);
+          }
+        } else {
+          int i0;
+          for (i0=0; i0<npl; i0++) {
+            evector[i0] = sqrt( pow(p0local[nw*pperwalker+i0*pperplan+2], 2) + pow(p0local[nw*pperwalker+i0*pperplan+3], 2) );
           }
         }
-        //make sure ld constants in range
-        if ( DILUTERANGE && (p0local[nw*pperwalker+npl*pperplan+2] < 0.0 || p0local[nw*pperwalker+npl*pperplan+2] > 1.0 || p0local[nw*pperwalker+npl*pperplan+3] < 0.0 || p0local[nw*pperwalker+npl*pperplan+3] > 1.0) ) notallowed=1;
+      }
+      // make sure e_d cos  w_d is within its range
+      if (ECUTON) {
+        double* emax = EMAX;
+        int i0;
+        for (i0=0; i0<npl; i0++) {
+          if (evector[i0] > emax[i0] ) notallowed=1;
+        }
+      }
+      //make sure ld constants in range
+      if ( DILUTERANGE && (p0local[nw*pperwalker+npl*pperplan+2] < 0.0 || p0local[nw*pperwalker+npl*pperplan+2] > 1.0 || p0local[nw*pperwalker+npl*pperplan+3] < 0.0 || p0local[nw*pperwalker+npl*pperplan+3] > 1.0) ) notallowed=1;
+
+      double ***nint_in = dsetup2(&p0local[nw*pperwalker], npl);
   
-        double ***nint_in = dsetup2(&p0local[nw*pperwalker], npl);
+      if (notallowed) { 
+          
+        acceptance[nw] = 0;
+  
+      } else {
+  
+        double ***nflux_rvs; 
+        if (MULTISTAR) nflux_rvs = dpintegrator_multi(nint_in, tfe, tve, cadencelist);
+        else nflux_rvs = dpintegrator_single(nint_in, tfe, tve, nte, cadencelist);
+        double **nttvts = nflux_rvs[2];
+        double **nflux = nflux_rvs[0];
+        double **nradvs = nflux_rvs[1];
+        double *ndev = devoerr(nflux);
+        double nxisqtemp = 0;
+        long il;
+        long maxil = (long) ndev[0];
+        if (! CELERITE) { 
+          for (il=0; il<maxil; il++) nxisqtemp += ndev[il+1]*ndev[il+1];
+        } else { // if celerite
+          double *xs = nflux_rvs[0][0];
+              long maxil = (long) xs[0];
+          double *trueys = nflux_rvs[0][1];
+          double *modelys = nflux_rvs[0][2];
+          double *es = nflux_rvs[0][3];
+          double *diffys = malloc(sofd*maxil);
+          for (il=0; il<maxil; il++) { 
+             diffys[il] = trueys[il+1]-modelys[il+1];
+          }
+          double *yvarp = malloc(sofd*maxil);
+          for (il=0; il<maxil; il++) { 
+             yvarp[il] = es[il+1]*es[il+1]; 
+          }
+          double *xp = &xs[1]; 
+          
+          int j_real = 0;
+          int j_complex;
+          double jitter, k1, k2, k3, S0, w0, Q;
+          jitter = p0local[pperwalker*nw+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+0];// p[npl][5+RVJITTERTOT+TTVJITTERTOT+0];
+          S0 = p0local[pperwalker*nw+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+1]; //p[npl][5+RVJITTERTOT+TTVJITTERTOT+1];
+          w0 = p0local[pperwalker*nw+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+2]; //p[npl][5+RVJITTERTOT+TTVJITTERTOT+2];
+          Q = p0local[pperwalker*nw+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+3];//p[npl][5+RVJITTERTOT+TTVJITTERTOT+3];
+          if (Q >= 0.5) {
+            j_complex = 1;
+          } else {
+            j_complex = 2;
+          }
+          VectorXd a_real(j_real),
+                  c_real(j_real),
+                  a_comp(j_complex),
+                  b_comp(j_complex),
+                  c_comp(j_complex),
+                  d_comp(j_complex);
+          if (Q >= 0.5) {
+            k1 = S0*w0*Q;
+            k2 = sqrt(4.*Q*Q - 1.);
+            k3 = w0/(2.*Q);
+            a_comp << k1;
+            b_comp << k1/k2;
+            c_comp << k3;
+            d_comp << k3*k2;
+          } else {
+            j_complex = 2;
+            k1 = 0.5*S0*w0*Q;
+            k2 = sqrt(1. - 4.*Q*Q);
+            k3 = w0/(2.*Q);
+            a_comp << k1*(1. + 1./k2), k1*(1. - 1./k2);
+            b_comp << 0., 0.;
+            c_comp << k3*(1. - k2), k3*(1. + k2);
+            d_comp << 0., 0.;
+          }
+        
+        
+        
+          VectorXd x = VectorXd::Map(xp, maxil);
+          VectorXd yvar = VectorXd::Map(yvarp, maxil);
+          VectorXd dy = VectorXd::Map(diffys, maxil);
+        
+          celerite::solver::CholeskySolver<double> solver;
+          solver.compute(
+                jitter,
+                a_real, c_real,
+                a_comp, b_comp, c_comp, d_comp,
+                x, yvar  // Note: this is the measurement _variance_
+            );
+        
+          // see l.186-192 in celerite.py
+          double logdet, diffs, llike;
+          logdet = solver.log_determinant();
+          diffs = solver.dot_solve(dy); 
+          llike = -0.5 * (diffs + logdet); 
+        
+          nxisqtemp = diffs+logdet;
+        
+          free(yvarp);
+          free(diffys);
+      
+        }
+        double *newelist;
+        if (RVS) {
+          if (! RVCELERITE) { 
+            double *newelist;
+            if (RVJITTERFLAG) {
+              long kj;
+              long maxkj = (long) tve[0][0]; 
+              newelist=malloc((maxkj+1)*sofd);
+              newelist[0] = (double) maxkj;
+              for (kj=0; kj<maxkj; kj++) {
+                int jitterindex = (int) tve[3][1+kj]*NTELESCOPES + tve[4][1+kj];
+                double sigmajitter = p0local[pperwalker*nw+npl*pperplan+5+jitterindex]*MPSTOAUPD;
+                double quadsum = sigmajitter*sigmajitter + nradvs[3][1+kj]*nradvs[3][1+kj];
+                // double check this... factor of 1/2
+                nxisqtemp += log(quadsum / (nradvs[3][1+kj]*nradvs[3][1+kj]) );
+                newelist[1+kj] = sqrt( quadsum );
+              }
+              nradvs[3] = newelist;
+            }
     
-        if (notallowed) { 
-            
-          acceptance[nw] = 0;
-    
-        } else {
-    
-          double ***nflux_rvs; 
-          if (MULTISTAR) nflux_rvs = dpintegrator_multi(nint_in, tfe, tve, cadencelist);
-          else nflux_rvs = dpintegrator_single(nint_in, tfe, tve, nte, cadencelist);
-          double **nttvts = nflux_rvs[2];
-          double **nflux = nflux_rvs[0];
-          double **nradvs = nflux_rvs[1];
-          double *ndev = devoerr(nflux);
-          double nxisqtemp = 0;
-          long il;
-          long maxil = (long) ndev[0];
-          if (! CELERITE) { 
-            for (il=0; il<maxil; il++) nxisqtemp += ndev[il+1]*ndev[il+1];
-          } else { // if celerite
-            double *xs = nflux_rvs[0][0];
-                long maxil = (long) xs[0];
-            double *trueys = nflux_rvs[0][1];
-            double *modelys = nflux_rvs[0][2];
-            double *es = nflux_rvs[0][3];
+            double *rvdev = devoerr(nradvs);
+            long maxil = (long) rvdev[0];
+            for (il=0; il<maxil; il++) nxisqtemp += rvdev[il+1]*rvdev[il+1];
+            free(rvdev);
+  
+          } else { // if rvcelerite
+            double *xs = nflux_rvs[1][0];
+            long maxil = (long) xs[0];
+            double *trueys = nflux_rvs[1][1];
+            double *modelys = nflux_rvs[1][2];
+            double *es = nflux_rvs[1][3];
             double *diffys = malloc(sofd*maxil);
             for (il=0; il<maxil; il++) { 
                diffys[il] = trueys[il+1]-modelys[il+1];
@@ -7899,10 +7498,10 @@ printf("kih = %i\n", ki);
             int j_real = 0;
             int j_complex;
             double jitter, k1, k2, k3, S0, w0, Q;
-            jitter = p0local[pperwalker*nw+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+0];// p[npl][5+RVJITTERTOT+TTVJITTERTOT+0];
-            S0 = p0local[pperwalker*nw+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+1]; //p[npl][5+RVJITTERTOT+TTVJITTERTOT+1];
-            w0 = p0local[pperwalker*nw+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+2]; //p[npl][5+RVJITTERTOT+TTVJITTERTOT+2];
-            Q = p0local[pperwalker*nw+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+3];//p[npl][5+RVJITTERTOT+TTVJITTERTOT+3];
+            jitter = p0local[pperwalker*nw+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+0];// p[npl][5+RVJITTERTOT+TTVJITTERTOT+0];
+            S0 = p0local[pperwalker*nw+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+1]; //p[npl][5+RVJITTERTOT+TTVJITTERTOT+1];
+            w0 = p0local[pperwalker*nw+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+2]; //p[npl][5+RVJITTERTOT+TTVJITTERTOT+2];
+            Q = p0local[pperwalker*nw+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+3];//p[npl][5+RVJITTERTOT+TTVJITTERTOT+3];
             if (Q >= 0.5) {
               j_complex = 1;
             } else {
@@ -7933,8 +7532,6 @@ printf("kih = %i\n", ki);
               d_comp << 0., 0.;
             }
           
-          
-          
             VectorXd x = VectorXd::Map(xp, maxil);
             VectorXd yvar = VectorXd::Map(yvarp, maxil);
             VectorXd dy = VectorXd::Map(diffys, maxil);
@@ -7953,743 +7550,137 @@ printf("kih = %i\n", ki);
             diffs = solver.dot_solve(dy); 
             llike = -0.5 * (diffs + logdet); 
           
-            nxisqtemp = diffs+logdet;
+            nxisqtemp += diffs+logdet;
+           
+#if (demcmc_compile==0)
+        
+            VectorXd prediction = solver.predict(dy, x);
+            char tmtefstr[1000];
+            strcpy(tmtefstr, "rv_");
+            strcat(tmtefstr, OUTSTR);
+            strcat(tmtefstr, ".gp_rvout");
+            FILE *tmtef;
+            tmtef = fopen(tmtefstr, "a");
+            long ijk;
+            for (ijk=0; ijk<maxil; ijk++) {
+              fprintf(tmtef, "%.12lf \n", prediction[ijk]);
+            }
+            fclose(tmtef);// = openf(tmtstr,"w");
+         
+#endif
           
             free(yvarp);
             free(diffys);
         
           }
-          double *newelist;
-          if (RVS) {
-            if (! RVCELERITE) { 
-              double *newelist;
-              if (RVJITTERFLAG) {
-                long kj;
-                long maxkj = (long) tve[0][0]; 
-                newelist=malloc((maxkj+1)*sofd);
-                newelist[0] = (double) maxkj;
-                for (kj=0; kj<maxkj; kj++) {
-                  int jitterindex = (int) tve[3][1+kj]*NTELESCOPES + tve[4][1+kj];
-                  double sigmajitter = p0local[pperwalker*nw+npl*pperplan+5+jitterindex]*MPSTOAUPD;
-                  double quadsum = sigmajitter*sigmajitter + nradvs[3][1+kj]*nradvs[3][1+kj];
-                  // double check this... factor of 1/2
-                  nxisqtemp += log(quadsum / (nradvs[3][1+kj]*nradvs[3][1+kj]) );
-                  newelist[1+kj] = sqrt( quadsum );
-                }
-                nradvs[3] = newelist;
-              }
-      
-              double *rvdev = devoerr(nradvs);
-              long maxil = (long) rvdev[0];
-              for (il=0; il<maxil; il++) nxisqtemp += rvdev[il+1]*rvdev[il+1];
-              free(rvdev);
-    
-            } else { // if rvcelerite
-              double *xs = nflux_rvs[1][0];
-              long maxil = (long) xs[0];
-              double *trueys = nflux_rvs[1][1];
-              double *modelys = nflux_rvs[1][2];
-              double *es = nflux_rvs[1][3];
-              double *diffys = malloc(sofd*maxil);
-              for (il=0; il<maxil; il++) { 
-                 diffys[il] = trueys[il+1]-modelys[il+1];
-              }
-              double *yvarp = malloc(sofd*maxil);
-              for (il=0; il<maxil; il++) { 
-                 yvarp[il] = es[il+1]*es[il+1]; 
-              }
-              double *xp = &xs[1]; 
-              
-              int j_real = 0;
-              int j_complex;
-              double jitter, k1, k2, k3, S0, w0, Q;
-              jitter = p0local[pperwalker*nw+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+0];// p[npl][5+RVJITTERTOT+TTVJITTERTOT+0];
-              S0 = p0local[pperwalker*nw+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+1]; //p[npl][5+RVJITTERTOT+TTVJITTERTOT+1];
-              w0 = p0local[pperwalker*nw+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+2]; //p[npl][5+RVJITTERTOT+TTVJITTERTOT+2];
-              Q = p0local[pperwalker*nw+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+3];//p[npl][5+RVJITTERTOT+TTVJITTERTOT+3];
-              if (Q >= 0.5) {
-                j_complex = 1;
-              } else {
-                j_complex = 2;
-              }
-              VectorXd a_real(j_real),
-                      c_real(j_real),
-                      a_comp(j_complex),
-                      b_comp(j_complex),
-                      c_comp(j_complex),
-                      d_comp(j_complex);
-              if (Q >= 0.5) {
-                k1 = S0*w0*Q;
-                k2 = sqrt(4.*Q*Q - 1.);
-                k3 = w0/(2.*Q);
-                a_comp << k1;
-                b_comp << k1/k2;
-                c_comp << k3;
-                d_comp << k3*k2;
-              } else {
-                j_complex = 2;
-                k1 = 0.5*S0*w0*Q;
-                k2 = sqrt(1. - 4.*Q*Q);
-                k3 = w0/(2.*Q);
-                a_comp << k1*(1. + 1./k2), k1*(1. - 1./k2);
-                b_comp << 0., 0.;
-                c_comp << k3*(1. - k2), k3*(1. + k2);
-                d_comp << 0., 0.;
-              }
-            
-              VectorXd x = VectorXd::Map(xp, maxil);
-              VectorXd yvar = VectorXd::Map(yvarp, maxil);
-              VectorXd dy = VectorXd::Map(diffys, maxil);
-            
-              celerite::solver::CholeskySolver<double> solver;
-              solver.compute(
-                    jitter,
-                    a_real, c_real,
-                    a_comp, b_comp, c_comp, d_comp,
-                    x, yvar  // Note: this is the measurement _variance_
-                );
-            
-              // see l.186-192 in celerite.py
-              double logdet, diffs, llike;
-              logdet = solver.log_determinant();
-              diffs = solver.dot_solve(dy); 
-              llike = -0.5 * (diffs + logdet); 
-            
-              nxisqtemp += diffs+logdet;
-             
-#if (demcmc_compile==0)
-          
-              VectorXd prediction = solver.predict(dy, x);
-              char tmtefstr[1000];
-              strcpy(tmtefstr, "rv_");
-              strcat(tmtefstr, OUTSTR);
-              strcat(tmtefstr, ".gp_rvout");
-              FILE *tmtef;
-              tmtef = fopen(tmtefstr, "a");
-              long ijk;
-              for (ijk=0; ijk<maxil; ijk++) {
-                fprintf(tmtef, "%.12lf \n", prediction[ijk]);
-              }
-              fclose(tmtef);// = openf(tmtstr,"w");
-           
-#endif
-            
-              free(yvarp);
-              free(diffys);
-          
-            }
-          }
-          if (TTVCHISQ) {
-            double *newelistttv;
-            if (TTVJITTERFLAG) {
-              long kj;
-              long maxkj = (long) nttvts[0][0];
-              newelistttv = malloc((maxkj+1)*sofd);
-              newelistttv[0] = (double) maxkj;
-              for (kj=0; kj<maxkj; kj++) {
-                int jitterindex = (kj < NTTV[0][0]) ? 0 : 1 ; 
-                //double sigmajitter = p[npl][5+RVJITTERTOT+jitterindex];
-                double sigmajitter = p0local[pperwalker*nw+npl*pperplan+5+RVJITTERTOT+jitterindex];
-                double quadsum = sigmajitter*sigmajitter + nttvts[3][1+kj]*nttvts[3][1+kj];
-                // check that the index on ttvts should be 2
-                nxisqtemp += log(quadsum / (nttvts[3][1+kj]*nttvts[3][1+kj]) );
-                newelistttv[1+kj] = sqrt(quadsum);
-              }
-              nttvts[3] = newelistttv;
-            }
-          
-            double *ttvdev = devoerr(nttvts);
-            long maxil = (long) ttvdev[0];
-            for (il=0; il<maxil; il++) nxisqtemp += ttvdev[il+1]*ttvdev[il+1];
-            free (ttvdev);
-            if (TTVJITTERFLAG) {
-              free(newelistttv);
-            }
-    
-          }
-          
-          //double photoradius = p0local[nw*pperwalker+npl*pperplan+1]; 
-          if (SPECTROSCOPY) {
-            if (photoradius > SPECRADIUS) nxisqtemp += pow( (photoradius - SPECRADIUS) / SPECERRPOS, 2 );
-            else nxisqtemp += pow( (photoradius - SPECRADIUS) / SPECERRNEG, 2 );
-          }
-          if (MASSSPECTROSCOPY) {
-            if (photomass > SPECMASS) nxisqtemp += pow( (photomass - SPECMASS) / MASSSPECERRPOS, 2 );
-            else nxisqtemp += pow( (photomass - SPECMASS) / MASSSPECERRNEG, 2 );
-          }
-          if (INCPRIOR) {
-                  int i0;
-            for (i0=0; i0<npl; i0++) {
-              nxisqtemp += -2.0*log( sin(p0local[nw*pperwalker+i0*pperplan+4] * M_PI/180.)       ); 
-            }
-          }
-          if (EPRIOR) {
-            int i0;
-            for (i0=0; i0<NPL; i0++) {
-              if (EPRIORV[i0]) {
-                double priorprob;
-                if (EPRIOR==1) {
-                  priorprob = rayleighpdf(evector[i0]);
-                } else if (EPRIOR==2) {
-                  priorprob = normalpdf(evector[i0]);
-                }
-                nxisqtemp += -2.0*log( priorprob );
-              }
-            }
-          }
-          double xisq = nxisqtemp;
-          
-  
-          free(nint_in[0][0]);
-          free(nint_in[0]);
-          free(nint_in[1][0]);
-          free(nint_in[1]);
-          int i1;
-          for(i1=0; i1<npl+1; i1++) free(nint_in[2][i1]);
-          free(nint_in[2]);
-          free(nint_in[3][0]);
-          free(nint_in[3]);
-          free(nint_in);
-      
-          free(nflux_rvs[0][2]);
-          if (RVS) {
-            free(nflux_rvs[1][2]);
-            if (RVJITTERFLAG) {
-              free(newelist);
-            }
-          }
-      
-          free(nflux_rvs[0]);
-          free(nflux_rvs[1]);
-          free(nflux_rvs);
-      
-          free(ndev);
-      
-          // prob that you should take new state
-          double prob;
-          prob = exp((xisq0[nw]-xisq)/2.);
-   
-          double bar = gsl_rng_uniform(rnw);
-      
-          // accept new state?
-          if (prob <= bar || isnan(prob)) {
-            acceptance[nw] = 0;
-          } else {
-            xisq0[nw] = xisq;
-          } 
-    
         }
-        free(evector);
-    
-        // switch back to old ones if not accepted
-        if (acceptance[nw] == 0) {
-          memcpy(&p0local[nw*pperwalker], p0localcopy, pperwalker*sofd);
-        }
-  
-      } else {  // if NTEMPS:
-        for (w=0; w<NTEMPS; w++) {
-          memcpy(p0localcopy, &p0localN[w][nw*pperwalker], pperwalker*sofd);
-          acceptanceN[w][nw] = 1;
-          unsigned long nw1;
-          do nw1 = gsl_rng_uniform_int(rnw, nwalkersul); while (nw1 == nw); 
-          unsigned long nw2;
-          do nw2 = gsl_rng_uniform_int(rnw, nwalkersul); while (nw2 == nw || nw2 == nw1); 
-      
-          int notallowed=0;
-      
-          int ip;
-          if (bimodf) {
-            if ( jj % bimodf == 0) {
-              for (ip=0; ip<npl; ip++) {
-                int ii;
-                for (ii=0; ii<pperplan; ii++) {
-                  p0localN[w][nw*pperwalker+ip*pperplan+ii] += (gammaN[w]+(1-gammaN[w])*bimodlist[ip*pperplan+ii])*(p0localN[w][nw1*pperwalker+ip*pperplan+ii]-p0localN[w][nw2*pperwalker+ip*pperplan+ii])*(1-parfix[ip*pperplan+ii])*(1+(1+(gammaN[w]-1)*bimodlist[ip*pperplan+ii])*gsl_ran_gaussian(rnw, 0.1));
-                }
-                // make sure i and Omega angles are not cycling through:
-                if ( p0localN[w][nw*pperwalker+ip*pperplan+4] < 0.0 || p0localN[w][nw*pperwalker+ip*pperplan+4] > 180.0 ) notallowed=1;
-                if ( p0localN[w][nw*pperwalker+ip*pperplan+5] < -180.0 || p0localN[w][nw*pperwalker+ip*pperplan+5] > 180.0 ) notallowed=1;
-                // make sure i>=90
-                if ( IGT90 && (p0localN[w][nw*pperwalker+ip*pperplan+4] < 90.0) ) notallowed=1;
-                // make sure m>=0
-                if ( MGT0 && (p0localN[w][nw*pperwalker+ip*pperplan+6] < 0.0) ) notallowed=1;
-                //make sure density is allowed
-                if (DENSITYCUTON) {
-                  double massg = p0localN[w][nw*pperwalker+ip*pperplan+6] / MSOMJ * MSUNGRAMS; 
-                  double radcm = p0localN[w][nw*pperwalker+npl*pperplan+1] * p0local[nw*pperwalker+ip*pperplan+7] * RSUNCM;
-                  double rhogcc = massg / (4./3.*M_PI*radcm*radcm*radcm);
-                  if (rhogcc > MAXDENSITY[ip]) notallowed=1;
-                }
-              } 
-              for (ip=0; ip<pstar; ip++) {
-                p0localN[w][nw*pperwalker+npl*pperplan+ip] += (gammaN[w]+(1-gammaN[w])*bimodlist[npl*pperplan+ip])*(p0localN[w][nw1*pperwalker+npl*pperplan+ip]-p0localN[w][nw2*pperwalker+npl*pperplan+ip])*(1-parfix[npl*pperplan+ip])*(1+(1+(gammaN[w]-1)*bimodlist[npl*pperplan+ip])*gsl_ran_gaussian(rnw, 0.1));
-              }
-              if ( DIGT0 && (p0localN[w][nw*pperwalker+npl*pperplan+4] < 0.0) ) notallowed=1;
-            } else {
-              for (ip=0; ip<npl; ip++) {
-                int ii;
-                for (ii=0; ii<pperplan; ii++) {
-                  p0localN[w][nw*pperwalker+ip*pperplan+ii] += gammaN[w]*(p0localN[w][nw1*pperwalker+ip*pperplan+ii]-p0localN[w][nw2*pperwalker+ip*pperplan+ii])*(1-parfix[ip*pperplan+ii])*(1+gsl_ran_gaussian(rnw, 0.1));
-                }
-                // make sure i and Omega angles are not cycling through:
-                if ( p0localN[w][nw*pperwalker+ip*pperplan+4] < 0.0 || p0localN[w][nw*pperwalker+ip*pperplan+4] > 180.0 ) notallowed=1;
-                if ( p0localN[w][nw*pperwalker+ip*pperplan+5] < -180.0 || p0localN[w][nw*pperwalker+ip*pperplan+5] > 180.0 ) notallowed=1;
-                // make sure i>=90
-                if ( IGT90 && (p0localN[w][nw*pperwalker+ip*pperplan+4] < 90.0) ) notallowed=1;
-                // make sure m>=0
-                if ( MGT0 && (p0localN[w][nw*pperwalker+ip*pperplan+6] < 0.0) ) notallowed=1;
-                //make sure density is allowed
-                if (DENSITYCUTON) {
-                  double massg = p0localN[w][nw*pperwalker+ip*pperplan+6] / MSOMJ * MSUNGRAMS; 
-                  double radcm = p0localN[w][nw*pperwalker+npl*pperplan+1] * p0local[nw*pperwalker+ip*pperplan+7] * RSUNCM;
-                  double rhogcc = massg / (4./3.*M_PI*radcm*radcm*radcm);
-                  if (rhogcc > MAXDENSITY[ip]) notallowed=1;
-                }
-              } 
-              for (ip=0; ip<pstar; ip++) {
-                p0localN[w][nw*pperwalker+npl*pperplan+ip] += gammaN[w]*(p0localN[w][nw1*pperwalker+npl*pperplan+ip]-p0localN[w][nw2*pperwalker+npl*pperplan+ip])*(1-parfix[npl*pperplan+ip])*(1+gsl_ran_gaussian(rnw, 0.1));
-              }
-              if ( DIGT0 && (p0localN[w][nw*pperwalker+npl*pperplan+4] < 0.0) ) notallowed=1;
-            }
-          } else {
-            for (ip=0; ip<npl; ip++) {
-              int ii;
-              for (ii=0; ii<pperplan; ii++) {
-                p0localN[w][nw*pperwalker+ip*pperplan+ii] += gammaN[w]*(p0localN[w][nw1*pperwalker+ip*pperplan+ii]-p0localN[w][nw2*pperwalker+ip*pperplan+ii])*(1-parfix[ip*pperplan+ii])*(1+gsl_ran_gaussian(rnw, 0.1));
-              }
-              // make sure i and Omega angles are not cycling through:
-              if ( p0localN[w][nw*pperwalker+ip*pperplan+4] < 0.0 || p0localN[w][nw*pperwalker+ip*pperplan+4] > 180.0 ) notallowed=1;
-              if ( p0localN[w][nw*pperwalker+ip*pperplan+5] < -180.0 || p0localN[w][nw*pperwalker+ip*pperplan+5] > 180.0 ) notallowed=1;
-              // make sure i>=90
-              if ( IGT90 && (p0localN[w][nw*pperwalker+ip*pperplan+4] < 90.0) ) notallowed=1;
-              // make sure m>=0
-              if ( MGT0 && (p0localN[w][nw*pperwalker+ip*pperplan+6] < 0.0) ) notallowed=1;
-              //make sure density is allowed
-              if (DENSITYCUTON) {
-                double massg = p0localN[w][nw*pperwalker+ip*pperplan+6] / MSOMJ * MSUNGRAMS; 
-                double radcm = p0localN[w][nw*pperwalker+npl*pperplan+1] * p0local[nw*pperwalker+ip*pperplan+7] * RSUNCM;
-                double rhogcc = massg / (4./3.*M_PI*radcm*radcm*radcm);
-                if (rhogcc > MAXDENSITY[ip]) notallowed=1;
-              }
-            } 
-            for (ip=0; ip<pstar; ip++) {
-              p0localN[w][nw*pperwalker+npl*pperplan+ip] += gammaN[w]*(p0localN[w][nw1*pperwalker+npl*pperplan+ip]-p0localN[w][nw2*pperwalker+npl*pperplan+ip])*(1-parfix[npl*pperplan+ip])*(1+gsl_ran_gaussian(rnw, 0.1));
-            }
-            if ( DIGT0 && (p0localN[w][nw*pperwalker+npl*pperplan+4] < 0.0) ) notallowed=1;
-          }
-          double photoradius = p0localN[w][nw*pperwalker+npl*pperplan+1]; 
-          double photomass = p0localN[w][nw*pperwalker+npl*pperplan+0]; 
-        
-          // check that RVJITTER >= 0
-          if (RVS) {
-            if (RVJITTERFLAG) {
-              int ki;
-              for (ki=0; ki<RVJITTERTOT; ki++) {
-                if (p0local[nw*pperwalker+npl*pperplan+(5+ki)] < 0.0) {
-                  notallowed=1;
-                }
-              }
-            }
-          }
-          // check that TTVJITTER >= 0
+        if (TTVCHISQ) {
+          double *newelistttv;
           if (TTVJITTERFLAG) {
-              int ki;
-              for (ki=0; ki<TTVJITTERTOT; ki++) {
-                if (p0local[nw*pperwalker+npl*pperplan+(5+ki)+RVJITTERTOT] < 0.0) {
-                  notallowed=1;
-                }
-              }
+            long kj;
+            long maxkj = (long) nttvts[0][0];
+            newelistttv = malloc((maxkj+1)*sofd);
+            newelistttv[0] = (double) maxkj;
+            for (kj=0; kj<maxkj; kj++) {
+              int jitterindex = (kj < NTTV[0][0]) ? 0 : 1 ; 
+              //double sigmajitter = p[npl][5+RVJITTERTOT+jitterindex];
+              double sigmajitter = p0local[pperwalker*nw+npl*pperplan+5+RVJITTERTOT+jitterindex];
+              double quadsum = sigmajitter*sigmajitter + nttvts[3][1+kj]*nttvts[3][1+kj];
+              // check that the index on ttvts should be 2
+              nxisqtemp += log(quadsum / (nttvts[3][1+kj]*nttvts[3][1+kj]) );
+              newelistttv[1+kj] = sqrt(quadsum);
+            }
+            nttvts[3] = newelistttv;
           }
-          // check that celerite terms >= 0
-          if (CELERITE) {
-              int ki;
-              for (ki=0; ki<NCELERITE; ki++) {
-                if (p0local[nw*pperwalker+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+ki] < 0.0) {
-                  notallowed=1;
-                }
-              }
+        
+          double *ttvdev = devoerr(nttvts);
+          long maxil = (long) ttvdev[0];
+          for (il=0; il<maxil; il++) nxisqtemp += ttvdev[il+1]*ttvdev[il+1];
+          free (ttvdev);
+          if (TTVJITTERFLAG) {
+            free(newelistttv);
           }
-          if (RVCELERITE) {
-              int ki;
-              for (ki=0; ki<NRVCELERITE; ki++) {
-                if (p0local[nw*pperwalker+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+ki] < 0.0) {
-                  notallowed=1;
-                }
-              }
-          }
-      
-          // make sure e_d cos  w_d is within its range
-          double* evector = malloc(npl*sofd);
-          if (ECUTON || EPRIOR) {
-            if (SQRTE) {
-              int i0;
-              for (i0=0; i0<npl; i0++) {
-                evector[i0] = pow(sqrt( pow(p0localN[w][nw*pperwalker+i0*pperplan+2], 2) + pow(p0localN[w][nw*pperwalker+i0*pperplan+3], 2) ), 2);
-              }
-            } else {
-              int i0;
-              for (i0=0; i0<npl; i0++) {
-                evector[i0] = sqrt( pow(p0localN[w][nw*pperwalker+i0*pperplan+2], 2) + pow(p0localN[w][nw*pperwalker+i0*pperplan+3], 2) );
-              }
-            }
-          }
-          // make sure e_d cos  w_d is within its range
-          if (ECUTON) {
-            double* emax = EMAX;
-            int i0;
-            for (i0=0; i0<npl; i0++) {
-              if (evector[i0] > emax[i0] ) notallowed=1;
-            }
-          }
-          //make sure ld constants in range
-          if ( DILUTERANGE && (p0localN[w][nw*pperwalker+npl*pperplan+2] < 0.0 || p0localN[w][nw*pperwalker+npl*pperplan+2] > 1.0 || p0localN[w][nw*pperwalker+npl*pperplan+3] < 0.0 || p0localN[w][nw*pperwalker+npl*pperplan+3] > 1.0) ) notallowed=1;
-      
-          double ***nint_in = dsetup2(&p0localN[w][nw*pperwalker], npl);
-          if (notallowed) { 
-              
-            acceptanceN[w][nw] = 0;
-      
-          } else {
-      
-            double ***nflux_rvs; 
-            if (MULTISTAR) nflux_rvs = dpintegrator_multi(nint_in, tfe, tve, cadencelist);
-            else nflux_rvs = dpintegrator_single(nint_in, tfe, tve, nte, cadencelist);
-            double **nttvts = nflux_rvs[2];
-            double **nflux = nflux_rvs[0];
-            double **nradvs = nflux_rvs[1];
-            double *ndev = devoerr(nflux);
-            double nxisqtemp = 0;
-            long il;
-            long maxil = (long) ndev[0];
-            if (! CELERITE) { 
-              for (il=0; il<maxil; il++) nxisqtemp += ndev[il+1]*ndev[il+1];
-            } else { // if celerite
-              double *xs = nflux_rvs[0][0];
-                  long maxil = (long) xs[0];
-              double *trueys = nflux_rvs[0][1];
-              double *modelys = nflux_rvs[0][2];
-              double *es = nflux_rvs[0][3];
-              double *diffys = malloc(sofd*maxil);
-              for (il=0; il<maxil; il++) { 
-                 diffys[il] = trueys[il+1]-modelys[il+1];
-              }
-              double *yvarp = malloc(sofd*maxil);
-              for (il=0; il<maxil; il++) { 
-                 yvarp[il] = es[il+1]*es[il+1]; 
-              }
-              double *xp = &xs[1]; 
-              
-              int j_real = 0;
-              int j_complex;
-              double jitter, k1, k2, k3, S0, w0, Q;
-              jitter = p0localN[w][pperwalker*nw+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+0];// p[npl][5+RVJITTERTOT+TTVJITTERTOT+0];
-              S0 = p0localN[w][pperwalker*nw+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+1]; //p[npl][5+RVJITTERTOT+TTVJITTERTOT+1];
-              w0 = p0localN[w][pperwalker*nw+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+2]; //p[npl][5+RVJITTERTOT+TTVJITTERTOT+2];
-              Q = p0localN[w][pperwalker*nw+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+3];//p[npl][5+RVJITTERTOT+TTVJITTERTOT+3];
-              if (Q >= 0.5) {
-                j_complex = 1;
-              } else {
-                j_complex = 2;
-              }
-              VectorXd a_real(j_real),
-                      c_real(j_real),
-                      a_comp(j_complex),
-                      b_comp(j_complex),
-                      c_comp(j_complex),
-                      d_comp(j_complex);
-              if (Q >= 0.5) {
-                k1 = S0*w0*Q;
-                k2 = sqrt(4.*Q*Q - 1.);
-                k3 = w0/(2.*Q);
-                a_comp << k1;
-                b_comp << k1/k2;
-                c_comp << k3;
-                d_comp << k3*k2;
-              } else {
-                j_complex = 2;
-                k1 = 0.5*S0*w0*Q;
-                k2 = sqrt(1. - 4.*Q*Q);
-                k3 = w0/(2.*Q);
-                a_comp << k1*(1. + 1./k2), k1*(1. - 1./k2);
-                b_comp << 0., 0.;
-                c_comp << k3*(1. - k2), k3*(1. + k2);
-                d_comp << 0., 0.;
-              }
-            
-            
-            
-              VectorXd x = VectorXd::Map(xp, maxil);
-              VectorXd yvar = VectorXd::Map(yvarp, maxil);
-              VectorXd dy = VectorXd::Map(diffys, maxil);
-            
-              celerite::solver::CholeskySolver<double> solver;
-              solver.compute(
-                    jitter,
-                    a_real, c_real,
-                    a_comp, b_comp, c_comp, d_comp,
-                    x, yvar  // Note: this is the measurement _variance_
-                );
-            
-              // see l.186-192 in celerite.py
-              double logdet, diffs, llike;
-              logdet = solver.log_determinant();
-              diffs = solver.dot_solve(dy); 
-              llike = -0.5 * (diffs + logdet); 
-            
-              nxisqtemp = diffs+logdet;
-            
-              free(yvarp);
-              free(diffys);
-          
-            }
-            double *newelist;
-            
-            if (RVS) {
-              if (! RVCELERITE) { 
-        
-                double *newelist;
-                if (RVJITTERFLAG) {
-                  long kj;
-                  long maxkj = (long) tve[0][0]; 
-                  newelist=malloc((maxkj+1)*sofd);
-                  newelist[0] = (double) maxkj;
-                  for (kj=0; kj<maxkj; kj++) {
-                    int jitterindex = (int) tve[3][1+kj]*NTELESCOPES + tve[4][1+kj];
-                    //double sigmajitter = p[npl][5+jitterindex]*MPSTOAUPD;
-                    double sigmajitter = p0localN[w][pperwalker*nw+npl*pperplan+5+jitterindex]*MPSTOAUPD;
-                    double quadsum = sigmajitter*sigmajitter + nradvs[3][1+kj]*nradvs[3][1+kj];
-                    // double check this... factor of 1/2
-                    nxisqtemp += log(quadsum / (nradvs[3][1+kj]*nradvs[3][1+kj]) );
-                    newelist[1+kj] = sqrt( quadsum );
-                  }
-                  nradvs[3] = newelist;
-                }
-        
-                double *rvdev = devoerr(nradvs);
-                long maxil = (long) rvdev[0];
-                for (il=0; il<maxil; il++) nxisqtemp += rvdev[il+1]*rvdev[il+1];
-                free(rvdev);
-        
-              } else { // if rvcelerite
-                double *xs = nflux_rvs[1][0];
-                    long maxil = (long) xs[0];
-                double *trueys = nflux_rvs[1][1];
-                double *modelys = nflux_rvs[1][2];
-                double *es = nflux_rvs[1][3];
-                double *diffys = malloc(sofd*maxil);
-                for (il=0; il<maxil; il++) { 
-                   diffys[il] = trueys[il+1]-modelys[il+1];
-                }
-                double *yvarp = malloc(sofd*maxil);
-                for (il=0; il<maxil; il++) { 
-                   yvarp[il] = es[il+1]*es[il+1]; 
-                }
-                double *xp = &xs[1]; 
-                
-                int j_real = 0;
-                int j_complex;
-                double jitter, k1, k2, k3, S0, w0, Q;
-                jitter = p0localN[w][pperwalker*nw+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+0];// p[npl][5+RVJITTERTOT+TTVJITTERTOT+0];
-                S0 = p0localN[w][pperwalker*nw+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+1]; //p[npl][5+RVJITTERTOT+TTVJITTERTOT+1];
-                w0 = p0localN[w][pperwalker*nw+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+2]; //p[npl][5+RVJITTERTOT+TTVJITTERTOT+2];
-                Q = p0localN[w][pperwalker*nw+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+3];//p[npl][5+RVJITTERTOT+TTVJITTERTOT+3];
-                if (Q >= 0.5) {
-                  j_complex = 1;
-                } else {
-                  j_complex = 2;
-                }
-                VectorXd a_real(j_real),
-                        c_real(j_real),
-                        a_comp(j_complex),
-                        b_comp(j_complex),
-                        c_comp(j_complex),
-                        d_comp(j_complex);
-                if (Q >= 0.5) {
-                  k1 = S0*w0*Q;
-                  k2 = sqrt(4.*Q*Q - 1.);
-                  k3 = w0/(2.*Q);
-                  a_comp << k1;
-                  b_comp << k1/k2;
-                  c_comp << k3;
-                  d_comp << k3*k2;
-                } else {
-                  j_complex = 2;
-                  k1 = 0.5*S0*w0*Q;
-                  k2 = sqrt(1. - 4.*Q*Q);
-                  k3 = w0/(2.*Q);
-                  a_comp << k1*(1. + 1./k2), k1*(1. - 1./k2);
-                  b_comp << 0., 0.;
-                  c_comp << k3*(1. - k2), k3*(1. + k2);
-                  d_comp << 0., 0.;
-                }
-              
-                VectorXd x = VectorXd::Map(xp, maxil);
-                VectorXd yvar = VectorXd::Map(yvarp, maxil);
-                VectorXd dy = VectorXd::Map(diffys, maxil);
-              
-                celerite::solver::CholeskySolver<double> solver;
-                solver.compute(
-                      jitter,
-                      a_real, c_real,
-                      a_comp, b_comp, c_comp, d_comp,
-                      x, yvar  // Note: this is the measurement _variance_
-                  );
-              
-                // see l.186-192 in celerite.py
-                double logdet, diffs, llike;
-                logdet = solver.log_determinant();
-                diffs = solver.dot_solve(dy); 
-                llike = -0.5 * (diffs + logdet); 
-              
-                nxisqtemp += diffs+logdet;
-               
-    #if (demcmc_compile==0)
-            
-                VectorXd prediction = solver.predict(dy, x);
-                char tmtefstr[1000];
-                strcpy(tmtefstr, "rv_");
-                strcat(tmtefstr, OUTSTR);
-                strcat(tmtefstr, ".gp_rvout");
-                FILE *tmtef;
-                tmtef = fopen(tmtefstr, "a");
-                long ijk;
-                for (ijk=0; ijk<maxil; ijk++) {
-                  fprintf(tmtef, "%.12lf \n", prediction[ijk]);
-                }
-                fclose(tmtef);// = openf(tmtstr,"w");
-             
-    #endif
-              
-                free(yvarp);
-                free(diffys);
-            
-              }
-            }
-            if (TTVCHISQ) {
-              double *newelistttv;
-              if (TTVJITTERFLAG) {
-                long kj;
-                long maxkj = (long) nttvts[0][0];
-                newelistttv = malloc((maxkj+1)*sofd);
-                newelistttv[0] = (double) maxkj;
-                for (kj=0; kj<maxkj; kj++) {
-                  int jitterindex = (kj < NTTV[0][0]) ? 0 : 1 ; 
-                  //double sigmajitter = p[npl][5+RVJITTERTOT+jitterindex];
-                  double sigmajitter = p0localN[w][pperwalker*nw+npl*pperplan+5+RVJITTERTOT+jitterindex];
-                  double quadsum = sigmajitter*sigmajitter + nttvts[3][1+kj]*nttvts[3][1+kj];
-                  // check that the index on ttvts should be 2
-                  nxisqtemp += log(quadsum / (nttvts[3][1+kj]*nttvts[3][1+kj]) );
-                  newelistttv[1+kj] = sqrt(quadsum);
-                }
-                nttvts[3] = newelistttv;
-              }
-              
-              double *ttvdev = devoerr(nttvts);
-              long maxil = (long) ttvdev[0];
-              for (il=0; il<maxil; il++) nxisqtemp += ttvdev[il+1]*ttvdev[il+1];
-              free (ttvdev);
-              if (TTVJITTERFLAG) {
-                free(newelistttv);
-              }
-      
-            }
-                
-            if (SPECTROSCOPY) {
-              if (photoradius > SPECRADIUS) nxisqtemp += pow( (photoradius - SPECRADIUS) / SPECERRPOS, 2 );
-              else nxisqtemp += pow( (photoradius - SPECRADIUS) / SPECERRNEG, 2 );
-            }
-            if (MASSSPECTROSCOPY) {
-              if (photomass > SPECMASS) nxisqtemp += pow( (photomass - SPECMASS) / MASSSPECERRPOS, 2 );
-              else nxisqtemp += pow( (photomass - SPECMASS) / MASSSPECERRNEG, 2 );
-            }
-            if (INCPRIOR) {
-              int i0;
-              for (i0=0; i0<npl; i0++) {
-                nxisqtemp += -2.0*log( sin(p0localN[w][nw*pperwalker+i0*pperplan+4] * M_PI/180.)); 
-              }
-            }
-            if (EPRIOR) {
-              int i0;
-              for (i0=0; i0<NPL; i0++) {
-                if (EPRIORV[i0]) {
-                  double priorprob;
-                  if (EPRIOR==1) {
-                    priorprob = rayleighpdf(evector[i0]);
-                  } else if (EPRIOR==2) {
-                    priorprob = normalpdf(evector[i0]);
-                  }
-                  nxisqtemp += -2.0*log( priorprob );
-                }
-              }
-            }
-            double xisq = nxisqtemp;
-        
-            free(nint_in[0][0]);
-            free(nint_in[0]);
-            free(nint_in[1][0]);
-            free(nint_in[1]);
-            int i1;
-            for(i1=0; i1<npl+1; i1++) free(nint_in[2][i1]);
-            free(nint_in[2]);
-            free(nint_in[3][0]);
-            free(nint_in[3]);
-            free(nint_in);
-        
-            free(nflux_rvs[0][2]);
-            if (RVS) {
-              free(nflux_rvs[1][2]);
-              if (RVJITTERFLAG) {
-                free(newelist);
-              }
-            }
-        
-            free(nflux_rvs[0]);
-            free(nflux_rvs[1]);
-            free(nflux_rvs);
-        
-            free(ndev);
-        
-            // prob that you should take new state
-            double prob;
-            prob = exp(beta[w]*(xisq0N[w][nw]-xisq)/2.);
-      
-      
-            double bar = gsl_rng_uniform(rnw);
-        
-            // accept new state?
-            if (prob <= bar || isnan(prob)) {
-              acceptanceN[w][nw] = 0;
-            } else {
-              xisq0N[w][nw] = xisq;
-            } 
-      
-          }
-          free(evector);
   
-          // switch back to old ones if not accepted
-          if (acceptanceN[w][nw] == 0) {
-            memcpy(&p0localN[w][nw*pperwalker], p0localcopy, pperwalker*sofd);
+        }
+        
+        //double photoradius = p0local[nw*pperwalker+npl*pperplan+1]; 
+        if (SPECTROSCOPY) {
+          if (photoradius > SPECRADIUS) nxisqtemp += pow( (photoradius - SPECRADIUS) / SPECERRPOS, 2 );
+          else nxisqtemp += pow( (photoradius - SPECRADIUS) / SPECERRNEG, 2 );
+        }
+        if (MASSSPECTROSCOPY) {
+          if (photomass > SPECMASS) nxisqtemp += pow( (photomass - SPECMASS) / MASSSPECERRPOS, 2 );
+          else nxisqtemp += pow( (photomass - SPECMASS) / MASSSPECERRNEG, 2 );
+        }
+        if (INCPRIOR) {
+                int i0;
+          for (i0=0; i0<npl; i0++) {
+            nxisqtemp += -2.0*log( sin(p0local[nw*pperwalker+i0*pperplan+4] * M_PI/180.)       ); 
           }
         }
-        for (w=0; w<NTEMPS-1; w++) {
-          // prob that we should swap temperature chains
-          double pswap;
-          double barswap;
-          if (jj % 10 == 0) {
-            pswap=0.0;
-            pswap = exp( (beta[w]-beta[w+1]) * (xisq0N[w][nw] - xisq0N[w+1][nw]) ); 
-            barswap = gsl_rng_uniform(rnw);
-            if (pswap >= barswap) {
-              memcpy(p0localcopy, &p0localN[w][nw*pperwalker], pperwalker*sofd);
-              memcpy(&p0localN[w][nw*pperwalker], &p0localN[w+1][nw*pperwalker], pperwalker*sofd);
-              memcpy(&p0localN[w+1][nw*pperwalker], p0localcopy, pperwalker*sofd);
-              sout = fopen("demcmc.stdout", "a");
-              fprintf(sout, "Tswap chain %i between %i and %i \n", nw, w, w+1);
-              fclose(sout);
+        if (EPRIOR) {
+          int i0;
+          for (i0=0; i0<NPL; i0++) {
+            if (EPRIORV[i0]) {
+              double priorprob;
+              if (EPRIOR==1) {
+                priorprob = rayleighpdf(evector[i0]);
+              } else if (EPRIOR==2) {
+                priorprob = normalpdf(evector[i0]);
+              }
+              nxisqtemp += -2.0*log( priorprob );
             }
           }
         }
+        double xisq = nxisqtemp;
+        
+
+        free(nint_in[0][0]);
+        free(nint_in[0]);
+        free(nint_in[1][0]);
+        free(nint_in[1]);
+        int i1;
+        for(i1=0; i1<npl+1; i1++) free(nint_in[2][i1]);
+        free(nint_in[2]);
+        free(nint_in[3][0]);
+        free(nint_in[3]);
+        free(nint_in);
+    
+        free(nflux_rvs[0][2]);
+        if (RVS) {
+          free(nflux_rvs[1][2]);
+          if (RVJITTERFLAG) {
+            free(newelist);
+          }
+        }
+    
+        free(nflux_rvs[0]);
+        free(nflux_rvs[1]);
+        free(nflux_rvs);
+    
+        free(ndev);
+    
+        // prob that you should take new state
+        double prob;
+        prob = exp((xisq0[nw]-xisq)/2.);
+ 
+        double bar = gsl_rng_uniform(rnw);
+    
+        // accept new state?
+        if (prob <= bar || isnan(prob)) {
+          acceptance[nw] = 0;
+        } else {
+          xisq0[nw] = xisq;
+        } 
+  
       }
-    ///must free all thes *N[w] s that I have alloced
+      free(evector);
+  
+      // switch back to old ones if not accepted
+      if (acceptance[nw] == 0) {
+        memcpy(&p0local[nw*pperwalker], p0localcopy, pperwalker*sofd);
+      }
+
     }
 
     if (RANK==0 && jj % 10 ==0) {
@@ -8703,354 +7694,183 @@ printf("kih = %i\n", ki);
       fclose(sout);
     }
 
-    if (! NTEMPS) {
-  
-      MPI_Allgather(&p0local[nwinit*pperwalker], pperwalker*npercore, MPI_DOUBLE, p0global, pperwalker*npercore, MPI_DOUBLE, MPI_COMM_WORLD);
-      MPI_Gather(&acceptance[nwinit], 1*npercore, MPI_INT, acceptanceglobal, 1*npercore, MPI_INT, 0, MPI_COMM_WORLD); 
-      MPI_Gather(&xisq0[nwinit], 1*npercore, MPI_DOUBLE, xisq0global, 1*npercore, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-  
-  
-      memcpy(p0local, p0global, totalparams*sofd);
-  
-      int nwdex;
-      if (RANK == 0) {
-        memcpy(acceptance, acceptanceglobal, nwalkers*sofi);
-        memcpy(xisq0, xisq0global, nwalkers*sofd);
-  
-        long naccept = 0;
-        for (nwdex=0; nwdex<nwalkers; nwdex++) naccept += acceptance[nwdex];
-  
-        double fracaccept = 1.0*naccept/nwalkers;
-        if (fracaccept >= optimal) {
-          gamma *= (1+relax);
-        } else {
-          gamma *= (1-relax);
-        }
-  
-        char gammafstr[80];
-        strcpy(gammafstr, "gamma_");
-        strcat(gammafstr, OUTSTR);
-        strcat(gammafstr, ".txt");
-        if (jj % 10 == 0) {
-          FILE *gammaf = fopen(gammafstr, "a");
-          fprintf(gammaf, "%li\t%lf\t%lf\n", jj, fracaccept, gamma);
-          fclose(gammaf);
-        }
-  
-        // print out occasionally
-        if (jj % 100 == 0) { 
-          char outfilestr[80];
-          strcpy(outfilestr, "demcmc_");
-          strcat(outfilestr, OUTSTR);
-          strcat(outfilestr, ".out");
-          outfile = fopen(outfilestr, "a");
-          
-          int nwdex;
-          for (nwdex=0; nwdex<nwalkers; nwdex++) {
-            char ch = 'a';
-            double pnum = 0.1;
-            for (i=0; i<npl; i++) {
-              fprintf(outfile, "%1.1lf", pnum);
-              ch++; 
-              pnum+=0.1;
-              int ii;
-              for (ii=0; ii<pperplan; ii++) {
-                fprintf(outfile, "\t%.15lf", p0local[nwdex*pperwalker+i*pperplan+ii]);  
-              }
-              fprintf(outfile, "\n");
-            }
-            fprintf(outfile, "%.15lf ; Mstar (R_sol)\n", p0local[nwdex*pperwalker+npl*pperplan+0]);
-            fprintf(outfile, "%.15lf ; Rstar (R_sol)\n", p0local[nwdex*pperwalker+npl*pperplan+1]);
-            fprintf(outfile, "%.15lf ; c1 (linear limb darkening) \n", p0local[nwdex*pperwalker+npl*pperplan+2]);
-            fprintf(outfile, "%.15lf ; c2 (quadratic limb darkening) \n", p0local[nwdex*pperwalker+npl*pperplan+3]);
-            fprintf(outfile, "%.15lf ; dilution (frac light not from stars in system)\n", p0local[nwdex*pperwalker+npl*pperplan+4]);
-            if (RVJITTERFLAG) {
-              for (i=0; i<RVJITTERTOT; i++) {
-                fprintf(outfile, "%.15lf ; rvjitter \n", p0local[nwdex*pperwalker+npl*pperplan+5+i]);
-              }
-            }
-            if (TTVJITTERFLAG) {
-              for (i=0; i<TTVJITTERTOT; i++) {
-                fprintf(outfile, "%.15lf ; rvjitter \n", p0local[nwdex*pperwalker+npl*pperplan+5+RVJITTERTOT+i]);
-              }
-            }
-            if (CELERITE) {
-              for (i=0; i<NCELERITE; i++) {
-                fprintf(outfile, "%.15lf ; celerite \n", p0local[nwdex*pperwalker+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+i]);
-              }
-            }
-            if (RVCELERITE) {
-              for (i=0; i<NRVCELERITE; i++) {
-                fprintf(outfile, "%.15lf ; rvcelerite \n", p0local[nwdex*pperwalker+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+i]);
-              }
-            }
-            fprintf(outfile, "; chisq = %18.11lf, %i, %li\n", xisq0[nwdex], nwdex, jj);  
-          }
-          fclose(outfile);
-        }
-  
-        FILE *outfile2;
-        for (nwdex=0; nwdex<nwalkers; nwdex++) {
-          if (xisq0[nwdex] < xisqmin) {
-            xisqmin = xisq0[nwdex];
-            sout = fopen("demcmc.stdout", "a");
-            fprintf(sout, "Chain %lu has Best xisq so far: %lf\n", nwdex, xisq0[nwdex]);
-            fclose(sout);
-            char outfile2str[80];
-            strcpy(outfile2str, "mcmc_bestchisq_");
-            strcat(outfile2str, OUTSTR);
-            strcat(outfile2str, ".aei");
-            outfile2 = fopen(outfile2str, "a");
-            fprintf(outfile2, "planet         period (d)               T0 (d)                  e                   i (deg)                 Omega (deg)               omega(deg)               mp (mjup)              rpors           ");
-            if (MULTISTAR) {
-              fprintf(outfile2, "brightness               c1                    c2\n");
-            } else {
-              fprintf(outfile2, "\n");
-            }
-            char ch = 'a';
-            double pnum = 0.1;
-            int ip;
-            for (ip=0; ip<npl; ip++) {
-              //fprintf(outfile2, "%c", ch);
-              fprintf(outfile2, "%1.1lf", pnum);
-              ch++; 
-              pnum+=0.1;
-              int ii;
-              for (ii=0; ii<2; ii++) {
-                fprintf(outfile2, "\t%.15lf", p0local[nwdex*pperwalker+ip*pperplan+ii]); 
-              }
-              if (SQRTE) {
-                fprintf(outfile2, "\t%18.15lf", pow( sqrt( pow(p0local[nwdex*pperwalker+ip*pperplan+2],2) + pow(p0local[nwdex*pperwalker+ip*pperplan+3],2) ), 2) );
-              } else {
-                fprintf(outfile2, "\t%18.15lf", sqrt( pow(p0local[nwdex*pperwalker+ip*pperplan+2],2) + pow(p0local[nwdex*pperwalker+ip*pperplan+3],2) ) );
-              }
-              for (ii=4; ii<6; ii++) {
-                fprintf(outfile2, "\t%.15lf", p0local[nwdex*pperwalker+ip*pperplan+ii]); 
-              }
-              fprintf(outfile2, "\t%18.15lf", atan2( p0local[nwdex*pperwalker+ip*pperplan+3] , p0local[nwdex*pperwalker+ip*pperplan+2] ) * 180./M_PI);
-              for (ii=6; ii<8; ii++) {
-                fprintf(outfile2, "\t%.15lf", p0local[nwdex*pperwalker+ip*pperplan+ii]); 
-              }
-              if (MULTISTAR) {
-                for (ii=8; ii<11; ii++) {
-                  fprintf(outfile2, "\t%.15lf", p0local[nwdex*pperwalker+ip*pperplan+ii]);
-                }
-              }
-              fprintf(outfile2, "\n");
-            }
-            fprintf(outfile2, "%.15lf ; Mstar (M_sol)\n", p0local[nwdex*pperwalker+npl*pperplan+0]);
-            fprintf(outfile2, "%.15lf ; Rstar (R_sol)\n", p0local[nwdex*pperwalker+npl*pperplan+1]);
-            fprintf(outfile2, "%.15lf ; c1 (linear limb darkening) \n", p0local[nwdex*pperwalker+npl*pperplan+2]);
-            fprintf(outfile2, "%.15lf ; c2 (quadratic limb darkening) \n", p0local[nwdex*pperwalker+npl*pperplan+3]);
-            fprintf(outfile2, "%.15lf ; dilution (frac light not from stars in system)\n", p0local[nwdex*pperwalker+npl*pperplan+4]);
-            if (RVJITTERFLAG) {
-              for (i=0; i<RVJITTERTOT; i++) {
-                fprintf(outfile2, "%.15lf ; rvjitter \n", p0local[nwdex*pperwalker+npl*pperplan+5+i]);
-              }
-            }
-            if (TTVJITTERFLAG) {
-              for (i=0; i<TTVJITTERTOT; i++) {
-                fprintf(outfile2, "%.15lf ; rvjitter \n", p0local[nwdex*pperwalker+npl*pperplan+5+RVJITTERTOT+i]);
-              }
-            }
-            if (CELERITE) {
-              for (i=0; i<NCELERITE; i++) {
-                fprintf(outfile2, "%.15lf ; celerite \n", p0local[nwdex*pperwalker+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+i]);
-              }
-            }
-            if (RVCELERITE) {
-              for (i=0; i<NRVCELERITE; i++) {
-                fprintf(outfile2, "%.15lf ; rvcelerite \n", p0local[nwdex*pperwalker+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+i]);
-              }
-            }
-            fprintf(outfile2, " ; Comments: These coordinates are jacobian (see Lee & Peale 2003).   gen = %li   ch=%li\n", jj, nwdex);
-            fprintf(outfile2, " ; chisq = %.15lf\n", xisq0[nwdex]);
-            fclose(outfile2);
-          }
-        }
-  
-  
-      }
-  
-      MPI_Bcast(&gamma, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-  
-      if ((RANK==0) && (jj % 10 == 0 )) {
-        //time testing
-        clock_gettime(CLOCK_MONOTONIC, &finish);
-  
-        elapsed = (finish.tv_sec - start.tv_sec);
-        elapsed += (finish.tv_nsec - start.tv_nsec) / 1000000000.0;
-        sout = fopen("demcmc.stdout", "a");
-        fprintf(sout, "Gen %li  run time + message passing = %3.12lf secs\n", jj, elapsed);
-        fclose(sout);
-      }
-  
-    } else {
+    MPI_Allgather(&p0local[nwinit*pperwalker], pperwalker*npercore, MPI_DOUBLE, p0global, pperwalker*npercore, MPI_DOUBLE, MPI_COMM_WORLD);
+    MPI_Gather(&acceptance[nwinit], 1*npercore, MPI_INT, acceptanceglobal, 1*npercore, MPI_INT, 0, MPI_COMM_WORLD); 
+    MPI_Gather(&xisq0[nwinit], 1*npercore, MPI_DOUBLE, xisq0global, 1*npercore, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
-      // correct how to copy these variables
-      for (w=0; w<NTEMPS; w++) {
+    memcpy(p0local, p0global, totalparams*sofd);
 
-        MPI_Allgather(&p0localN[w][nw*pperwalker], pperwalker, MPI_DOUBLE, p0globalN[w], pperwalker, MPI_DOUBLE, MPI_COMM_WORLD);
-        MPI_Gather(&acceptanceN[w][nw], 1, MPI_INT, acceptanceglobalN[w], 1, MPI_INT, 0, MPI_COMM_WORLD); 
-        MPI_Gather(&xisq0N[w][nw], 1, MPI_DOUBLE, xisq0globalN[w], 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-    
-        memcpy(p0localN[w], p0globalN[w], totalparams*sofd);
-    
+    int nwdex;
+    if (RANK == 0) {
+      memcpy(acceptance, acceptanceglobal, nwalkers*sofi);
+      memcpy(xisq0, xisq0global, nwalkers*sofd);
+
+      long naccept = 0;
+      for (nwdex=0; nwdex<nwalkers; nwdex++) naccept += acceptance[nwdex];
+
+      double fracaccept = 1.0*naccept/nwalkers;
+      if (fracaccept >= optimal) {
+        gamma *= (1+relax);
+      } else {
+        gamma *= (1-relax);
+      }
+
+      char gammafstr[80];
+      strcpy(gammafstr, "gamma_");
+      strcat(gammafstr, OUTSTR);
+      strcat(gammafstr, ".txt");
+      if (jj % 10 == 0) {
+        FILE *gammaf = fopen(gammafstr, "a");
+        fprintf(gammaf, "%li\t%lf\t%lf\n", jj, fracaccept, gamma);
+        fclose(gammaf);
+      }
+
+      // print out occasionally
+      if (jj % 100 == 0) { 
+        char outfilestr[80];
+        strcpy(outfilestr, "demcmc_");
+        strcat(outfilestr, OUTSTR);
+        strcat(outfilestr, ".out");
+        outfile = fopen(outfilestr, "a");
+        
         int nwdex;
-        if (RANK == 0) {
-          memcpy(acceptanceN[w], acceptanceglobalN[w], nwalkers*sofi);
-          memcpy(xisq0N[w], xisq0globalN[w], nwalkers*sofd);
-    
-          long naccept = 0;
-          for (nwdex=0; nwdex<nwalkers; nwdex++) naccept += acceptanceN[w][nwdex];
-    
-          double fracaccept = 1.0*naccept/nwalkers;
-          if (fracaccept >= optimal) {
-            gammaN[w] *= (1+relax);
-          } else {
-            gammaN[w] *= (1-relax);
+        for (nwdex=0; nwdex<nwalkers; nwdex++) {
+          char ch = 'a';
+          double pnum = 0.1;
+          for (i=0; i<npl; i++) {
+            fprintf(outfile, "%1.1lf", pnum);
+            ch++; 
+            pnum+=0.1;
+            int ii;
+            for (ii=0; ii<pperplan; ii++) {
+              fprintf(outfile, "\t%.15lf", p0local[nwdex*pperwalker+i*pperplan+ii]);  
+            }
+            fprintf(outfile, "\n");
           }
-    
-          char gammafstr[80];
-          strcpy(gammafstr, "gamma_");
-          strcat(gammafstr, OUTSTR);
-          strcat(gammafstr, ".txt");
-          sprintf(gammafstr, "%s_%i", gammafstr, w);
-          if (jj % 10 == 0) {
-            FILE *gammaf = fopen(gammafstr, "a");
-            fprintf(gammaf, "%li\t%lf\t%lf\n", jj, fracaccept, gammaN[w]);
-            fclose(gammaf);
-          }
-    
-          // print out occasionally
-          if (jj % 100 == 0) { 
-            char outfilestr[80];
-            strcpy(outfilestr, "demcmc_");
-            strcat(outfilestr, OUTSTR);
-            strcat(outfilestr, ".out");
-            sprintf(outfilestr, "%s_%i", outfilestr, w);
-            outfile = fopen(outfilestr, "a");
-            
-            int nwdex;
-            for (nwdex=0; nwdex<nwalkers; nwdex++) {
-              //printf("demcmc herey\n");
-              char ch = 'a';
-              double pnum = 0.1;
-              for (i=0; i<npl; i++) {
-                //fprintf(outfile, "%c", ch);
-                fprintf(outfile, "%1.1lf", pnum);
-                ch++; 
-                pnum+=0.1;
-                int ii;
-                for (ii=0; ii<pperplan; ii++) {
-                  fprintf(outfile, "\t%.15lf", p0localN[w][nwdex*pperwalker+i*pperplan+ii]);  
-                }
-                fprintf(outfile, "\n");
-              }
-              fprintf(outfile, "%.15lf ; Mstar (R_sol)\n", p0localN[w][nwdex*pperwalker+npl*pperplan+0]);
-              fprintf(outfile, "%.15lf ; Rstar (R_sol)\n", p0localN[w][nwdex*pperwalker+npl*pperplan+1]);
-              fprintf(outfile, "%.15lf ; c1 (linear limb darkening) \n", p0localN[w][nwdex*pperwalker+npl*pperplan+2]);
-              fprintf(outfile, "%.15lf ; c2 (quadratic limb darkening) \n", p0localN[w][nwdex*pperwalker+npl*pperplan+3]);
-              fprintf(outfile, "%.15lf ; dilution (frac light not from stars in system)\n", p0localN[w][nwdex*pperwalker+npl*pperplan+4]);
-              fprintf(outfile, "; chisq = %18.11lf, %i, %li\n", xisq0N[w][nwdex], nwdex, jj);  
-            }
-            fclose(outfile);
-          }
-    
-          FILE *outfile2;
-          for (nwdex=0; nwdex<nwalkers; nwdex++) {
-            if (w==0 && xisq0N[w][nwdex] < xisqmin) {
-              xisqmin = xisq0N[w][nwdex];
-              sout = fopen("demcmc.stdout", "a");
-              fprintf(sout, "Chain %lu has Best xisq so far: %lf\n", nwdex, xisq0N[w][nwdex]);
-              fclose(sout);
-              char outfile2str[80];
-              strcpy(outfile2str, "mcmc_bestchisq_");
-              strcat(outfile2str, OUTSTR);
-              strcat(outfile2str, ".aei");
-              outfile2 = fopen(outfile2str, "a");
-              fprintf(outfile2, "planet         period (d)               T0 (d)                  e                   i (deg)                 Omega (deg)               omega(deg)               mp (mjup)              rpors           ");
-              if (MULTISTAR) {
-                fprintf(outfile2, "brightness               c1                    c2\n");
-              } else {
-                fprintf(outfile2, "\n");
-              }
-              char ch = 'a';
-              double pnum = 0.1;
-              int ip;
-              for (ip=0; ip<npl; ip++) {
-                fprintf(outfile2, "%1.1lf", pnum);
-                ch++; 
-                pnum+=0.1;
-                int ii;
-                for (ii=0; ii<2; ii++) {
-                  fprintf(outfile2, "\t%.15lf", p0localN[w][nwdex*pperwalker+ip*pperplan+ii]); 
-                }
-                if (SQRTE) {
-                  fprintf(outfile2, "\t%18.15lf", pow( sqrt( pow(p0localN[w][nwdex*pperwalker+ip*pperplan+2],2) + pow(p0localN[w][nwdex*pperwalker+ip*pperplan+3],2) ), 2) );
-                } else {
-                  fprintf(outfile2, "\t%18.15lf", sqrt( pow(p0localN[w][nwdex*pperwalker+ip*pperplan+2],2) + pow(p0localN[w][nwdex*pperwalker+ip*pperplan+3],2) ) );
-                }
-                for (ii=4; ii<6; ii++) {
-                  fprintf(outfile2, "\t%.15lf", p0localN[w][nwdex*pperwalker+ip*pperplan+ii]); 
-                }
-                fprintf(outfile2, "\t%18.15lf", atan2( p0localN[w][nwdex*pperwalker+ip*pperplan+3] , p0localN[w][nwdex*pperwalker+ip*pperplan+2] ) * 180./M_PI);
-                for (ii=6; ii<8; ii++) {
-                  fprintf(outfile2, "\t%.15lf", p0localN[w][nwdex*pperwalker+ip*pperplan+ii]); 
-                }
-                if (MULTISTAR) {
-                  for (ii=8; ii<11; ii++) {
-                    fprintf(outfile2, "\t%.15lf", p0localN[w][nwdex*pperwalker+ip*pperplan+ii]);
-                  }
-                }
-                fprintf(outfile2, "\n");
-              }
-              fprintf(outfile2, "%.15lf ; Mstar (M_sol)\n", p0localN[w][nwdex*pperwalker+npl*pperplan+0]);
-              fprintf(outfile2, "%.15lf ; Rstar (R_sol)\n", p0localN[w][nwdex*pperwalker+npl*pperplan+1]);
-              fprintf(outfile2, "%.15lf ; c1 (linear limb darkening) \n", p0localN[w][nwdex*pperwalker+npl*pperplan+2]);
-              fprintf(outfile2, "%.15lf ; c2 (quadratic limb darkening) \n", p0localN[w][nwdex*pperwalker+npl*pperplan+3]);
-              fprintf(outfile2, "%.15lf ; dilution (frac light not from stars in system)\n", p0localN[w][nwdex*pperwalker+npl*pperplan+4]);
-            if (RVJITTERFLAG) {
-              for (i=0; i<RVJITTERTOT; i++) {
-                fprintf(outfile2, "%.15lf ; rvjitter \n", p0localN[w][nwdex*pperwalker+npl*pperplan+5+i]);
-              }
-            }
-            if (TTVJITTERFLAG) {
-              for (i=0; i<TTVJITTERTOT; i++) {
-                fprintf(outfile, "%.15lf ; rvjitter \n", p0localN[w][nwdex*pperwalker+npl*pperplan+5+RVJITTERTOT+i]);
-              }
-            }
-            if (CELERITE) {
-              for (i=0; i<NCELERITE; i++) {
-                fprintf(outfile, "%.15lf ; celerite \n", p0localN[w][nwdex*pperwalker+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+i]);
-              }
-            }
-            if (RVCELERITE) {
-              for (i=0; i<NRVCELERITE; i++) {
-                fprintf(outfile, "%.15lf ; rvcelerite \n", p0localN[w][nwdex*pperwalker+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+i]);
-              }
-            }
-              fprintf(outfile2, " ; Comments: These coordinates are jacobian (see Lee & Peale 2003).   gen = %li \n", jj);
-              fprintf(outfile2, " ; chisq = %.15lf\n", xisq0N[w][nwdex]);
-              fclose(outfile2);
+          fprintf(outfile, "%.15lf ; Mstar (R_sol)\n", p0local[nwdex*pperwalker+npl*pperplan+0]);
+          fprintf(outfile, "%.15lf ; Rstar (R_sol)\n", p0local[nwdex*pperwalker+npl*pperplan+1]);
+          fprintf(outfile, "%.15lf ; c1 (linear limb darkening) \n", p0local[nwdex*pperwalker+npl*pperplan+2]);
+          fprintf(outfile, "%.15lf ; c2 (quadratic limb darkening) \n", p0local[nwdex*pperwalker+npl*pperplan+3]);
+          fprintf(outfile, "%.15lf ; dilution (frac light not from stars in system)\n", p0local[nwdex*pperwalker+npl*pperplan+4]);
+          if (RVJITTERFLAG) {
+            for (i=0; i<RVJITTERTOT; i++) {
+              fprintf(outfile, "%.15lf ; rvjitter \n", p0local[nwdex*pperwalker+npl*pperplan+5+i]);
             }
           }
+          if (TTVJITTERFLAG) {
+            for (i=0; i<TTVJITTERTOT; i++) {
+              fprintf(outfile, "%.15lf ; rvjitter \n", p0local[nwdex*pperwalker+npl*pperplan+5+RVJITTERTOT+i]);
+            }
+          }
+          if (CELERITE) {
+            for (i=0; i<NCELERITE; i++) {
+              fprintf(outfile, "%.15lf ; celerite \n", p0local[nwdex*pperwalker+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+i]);
+            }
+          }
+          if (RVCELERITE) {
+            for (i=0; i<NRVCELERITE; i++) {
+              fprintf(outfile, "%.15lf ; rvcelerite \n", p0local[nwdex*pperwalker+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+i]);
+            }
+          }
+          fprintf(outfile, "; chisq = %18.11lf, %i, %li\n", xisq0[nwdex], nwdex, jj);  
         }
-    
-        MPI_Bcast(&gammaN[w], 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-    
-    
-        if ((RANK==0) && (jj % 10 == 0 )) {
-          //time testing
-          clock_gettime(CLOCK_MONOTONIC, &finish);
-    
-          elapsed = (finish.tv_sec - start.tv_sec);
-          elapsed += (finish.tv_nsec - start.tv_nsec) / 1000000000.0;
+        fclose(outfile);
+      }
+
+      FILE *outfile2;
+      for (nwdex=0; nwdex<nwalkers; nwdex++) {
+        if (xisq0[nwdex] < xisqmin) {
+          xisqmin = xisq0[nwdex];
           sout = fopen("demcmc.stdout", "a");
-          fprintf(sout, "Gen %li  run time + message passing = %3.12lf secs\n", jj, elapsed);
+          fprintf(sout, "Chain %lu has Best xisq so far: %lf\n", nwdex, xisq0[nwdex]);
           fclose(sout);
+          char outfile2str[80];
+          strcpy(outfile2str, "mcmc_bestchisq_");
+          strcat(outfile2str, OUTSTR);
+          strcat(outfile2str, ".aei");
+          outfile2 = fopen(outfile2str, "a");
+          fprintf(outfile2, "planet         period (d)               T0 (d)                  e                   i (deg)                 Omega (deg)               omega(deg)               mp (mjup)              rpors           ");
+          if (MULTISTAR) {
+            fprintf(outfile2, "brightness               c1                    c2\n");
+          } else {
+            fprintf(outfile2, "\n");
+          }
+          char ch = 'a';
+          double pnum = 0.1;
+          int ip;
+          for (ip=0; ip<npl; ip++) {
+            //fprintf(outfile2, "%c", ch);
+            fprintf(outfile2, "%1.1lf", pnum);
+            ch++; 
+            pnum+=0.1;
+            int ii;
+            for (ii=0; ii<2; ii++) {
+              fprintf(outfile2, "\t%.15lf", p0local[nwdex*pperwalker+ip*pperplan+ii]); 
+            }
+            if (SQRTE) {
+              fprintf(outfile2, "\t%18.15lf", pow( sqrt( pow(p0local[nwdex*pperwalker+ip*pperplan+2],2) + pow(p0local[nwdex*pperwalker+ip*pperplan+3],2) ), 2) );
+            } else {
+              fprintf(outfile2, "\t%18.15lf", sqrt( pow(p0local[nwdex*pperwalker+ip*pperplan+2],2) + pow(p0local[nwdex*pperwalker+ip*pperplan+3],2) ) );
+            }
+            for (ii=4; ii<6; ii++) {
+              fprintf(outfile2, "\t%.15lf", p0local[nwdex*pperwalker+ip*pperplan+ii]); 
+            }
+            fprintf(outfile2, "\t%18.15lf", atan2( p0local[nwdex*pperwalker+ip*pperplan+3] , p0local[nwdex*pperwalker+ip*pperplan+2] ) * 180./M_PI);
+            for (ii=6; ii<8; ii++) {
+              fprintf(outfile2, "\t%.15lf", p0local[nwdex*pperwalker+ip*pperplan+ii]); 
+            }
+            if (MULTISTAR) {
+              for (ii=8; ii<11; ii++) {
+                fprintf(outfile2, "\t%.15lf", p0local[nwdex*pperwalker+ip*pperplan+ii]);
+              }
+            }
+            fprintf(outfile2, "\n");
+          }
+          fprintf(outfile2, "%.15lf ; Mstar (M_sol)\n", p0local[nwdex*pperwalker+npl*pperplan+0]);
+          fprintf(outfile2, "%.15lf ; Rstar (R_sol)\n", p0local[nwdex*pperwalker+npl*pperplan+1]);
+          fprintf(outfile2, "%.15lf ; c1 (linear limb darkening) \n", p0local[nwdex*pperwalker+npl*pperplan+2]);
+          fprintf(outfile2, "%.15lf ; c2 (quadratic limb darkening) \n", p0local[nwdex*pperwalker+npl*pperplan+3]);
+          fprintf(outfile2, "%.15lf ; dilution (frac light not from stars in system)\n", p0local[nwdex*pperwalker+npl*pperplan+4]);
+          if (RVJITTERFLAG) {
+            for (i=0; i<RVJITTERTOT; i++) {
+              fprintf(outfile2, "%.15lf ; rvjitter \n", p0local[nwdex*pperwalker+npl*pperplan+5+i]);
+            }
+          }
+          if (TTVJITTERFLAG) {
+            for (i=0; i<TTVJITTERTOT; i++) {
+              fprintf(outfile2, "%.15lf ; rvjitter \n", p0local[nwdex*pperwalker+npl*pperplan+5+RVJITTERTOT+i]);
+            }
+          }
+          if (CELERITE) {
+            for (i=0; i<NCELERITE; i++) {
+              fprintf(outfile2, "%.15lf ; celerite \n", p0local[nwdex*pperwalker+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+i]);
+            }
+          }
+          if (RVCELERITE) {
+            for (i=0; i<NRVCELERITE; i++) {
+              fprintf(outfile2, "%.15lf ; rvcelerite \n", p0local[nwdex*pperwalker+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+i]);
+            }
+          }
+          fprintf(outfile2, " ; Comments: These coordinates are jacobian (see Lee & Peale 2003).   gen = %li   ch=%li\n", jj, nwdex);
+          fprintf(outfile2, " ; chisq = %.15lf\n", xisq0[nwdex]);
+          fclose(outfile2);
         }
       }
+
+
+    }
+
+    MPI_Bcast(&gamma, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
+    if ((RANK==0) && (jj % 10 == 0 )) {
+      //time testing
+      clock_gettime(CLOCK_MONOTONIC, &finish);
+
+      elapsed = (finish.tv_sec - start.tv_sec);
+      elapsed += (finish.tv_nsec - start.tv_nsec) / 1000000000.0;
+      sout = fopen("demcmc.stdout", "a");
+      fprintf(sout, "Gen %li  run time + message passing = %3.12lf secs\n", jj, elapsed);
+      fclose(sout);
     }
 
     jj+=1;
