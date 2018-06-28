@@ -6031,29 +6031,10 @@ printf("kih = %i\n", ki);
   }
 
   int w;
-  double ****p0N;
-  if (NTEMPS) {
-    p0N = malloc(NTEMPS*sizeof(double***));
-    for (w=0; w<NTEMPS; w++) {
-      p0N[w] = malloc(nwalkers*sizeof(double**));
-      for (i=0; i<nwalkers; i++){
-        p0N[w][i] = malloc((npl+1)*sofds);
-        int j;
-        for (j=0; j<npl; j++) {
-          p0N[w][i][j] = malloc(pperplan*sofd); 
-        }
-        p0N[w][i][npl] = malloc(pstar*sofd);
-    
-      }
-    }
-  }
 
   double gamma;
   double xisqmin; 
   double *gammaN;
-  if (NTEMPS) {
-    gammaN = malloc(NTEMPS*sofd);
-  }
 
   int fixedpars = 0;
   for (i=0; i<nparam; i++) fixedpars += parfix[i];
