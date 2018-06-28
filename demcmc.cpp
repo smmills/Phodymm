@@ -18,6 +18,7 @@
 // $ gcc -Ofast -o stability -lgsl -lgslcblas -fopenmp demcmc.c
 // g++ -w -O3 -o lcout -I/home/smills/celerite/celerite/cpp/include -I/home/smills/celerite/celerite/cpp/lib/eigen_3.3.3 -lm -lgsl -lgslcblas -fpermissive demcmc.cpp
 
+//Testing adding a line
 
 #if (demcmc_compile==1) 
 #include <mpi.h>
