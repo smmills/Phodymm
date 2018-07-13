@@ -1,4 +1,4 @@
-#define demcmc_compile 0
+#define demcmc_compile 1
 
 // To compile lcout:
 // make sure demcmc_compile is defined as 0
@@ -4367,7 +4367,8 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
   
   
       } else { // if rvcelerite
-        xisqtemp += celerite_fit(flux_rvs, p0local, i, 1, 0); 
+        xisqtemp += celerite_fit(flux_rvs, p0local, i, 1, 0);
+      } 
     }
 
     if (TTVCHISQ) {
@@ -4396,7 +4397,7 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
       }
     }
 
-    xisqtemp += compute_priors(p0local, i) 
+    xisqtemp += compute_priors(p0local, i); 
 
     celeritefail:
 
@@ -4547,7 +4548,7 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
         if (! CELERITE) { 
           for (il=0; il<maxil; il++) nxisqtemp += ndev[il+1]*ndev[il+1];
         } else { // if celerite
-          nxisqtemp = celerite_fit(nfluxrvs, p0local, nw, 0, 0);
+          nxisqtemp = celerite_fit(nflux_rvs, p0local, nw, 0, 0);
         }
         double *newelist;
         if (RVS) {
@@ -4575,7 +4576,7 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
             free(rvdev);
   
           } else { // if rvcelerite
-            nxisqtemp += celerite_fit(nfluxrvs, p0local, nw, 1, 0);
+            nxisqtemp += celerite_fit(nflux_rvs, p0local, nw, 1, 0);
           }
         }
         if (TTVCHISQ) {
