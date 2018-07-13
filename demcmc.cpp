@@ -442,6 +442,137 @@ double compute_priors(double *p0local, int i) {
 
 
 
+// Wrapper for computing a celerite fit and returning the effective chi^2
+double celerite_fit(double*** flux_rvs, double* p0local, int i, int rvflag, int verbose)  { 
+
+  const int npl = NPL;
+  const int pperplan = PPERPLAN;
+  const int pperwalker = PPERWALKER;
+  const int sofd = SOFD;
+
+  double xisq;  
+
+  double *xs = flux_rvs[rvflag][0];
+  long maxil = (long) xs[0];
+  double *trueys = flux_rvs[rvflag][1];
+  double *modelys = flux_rvs[rvflag][2];
+  double *es = flux_rvs[rvflag][3];
+  double *diffys = malloc(sofd*maxil);
+  int il;
+  for (il=0; il<maxil; il++) { 
+    diffys[il] = trueys[il+1]-modelys[il+1];
+  }
+  double *yvarp = malloc(sofd*maxil);
+  for (il=0; il<maxil; il++) { 
+    yvarp[il] = es[il+1]*es[il+1]; 
+  }
+  double *xp = &xs[1]; 
+  
+  int j_real = 0;
+  int j_complex;
+  double jitter, k1, k2, k3, S0, w0, Q;
+  jitter = p0local[pperwalker*i+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE*rvflag+0];
+  S0 = p0local[pperwalker*i+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE*rvflag+1];
+  w0 = p0local[pperwalker*i+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE*rvflag+2];
+  Q = p0local[pperwalker*i+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE*rvflag+3];
+  if (Q >= 0.5) {
+    j_complex = 1;
+  } else {
+    j_complex = 2;
+  }
+  VectorXd a_real(j_real),
+          c_real(j_real),
+          a_comp(j_complex),
+          b_comp(j_complex),
+          c_comp(j_complex),
+          d_comp(j_complex);
+  if (Q >= 0.5) {
+    k1 = S0*w0*Q;
+    k2 = sqrt(4.*Q*Q - 1.);
+    k3 = w0/(2.*Q);
+    a_comp << k1;
+    b_comp << k1/k2;
+    c_comp << k3;
+    d_comp << k3*k2;
+  } else {
+    j_complex = 2;
+    k1 = 0.5*S0*w0*Q;
+    k2 = sqrt(1. - 4.*Q*Q);
+    k3 = w0/(2.*Q);
+    a_comp << k1*(1. + 1./k2), k1*(1. - 1./k2);
+    b_comp << 0., 0.;
+    c_comp << k3*(1. - k2), k3*(1. + k2);
+    d_comp << 0., 0.;
+  }
+  
+  if (verbose) {  
+    printf("%lf %lf %lf %lf\n", a_comp[0], b_comp[0], c_comp[0], d_comp[0]);
+  }
+
+  VectorXd x = VectorXd::Map(xp, maxil);
+  VectorXd yvar = VectorXd::Map(yvarp, maxil);
+  VectorXd dy = VectorXd::Map(diffys, maxil);
+  
+  celerite::solver::CholeskySolver<double> solver;
+  solver.compute(
+        jitter,
+        a_real, c_real,
+        a_comp, b_comp, c_comp, d_comp,
+        x, yvar  // Note: this is the measurement _variance_
+    );
+  
+  // see l.186-192 in celerite.py
+  double logdet, diffs, llike;
+  logdet = solver.log_determinant();
+  diffs = solver.dot_solve(dy); 
+  llike = -0.5 * (diffs + logdet); 
+  
+  xisq = diffs+logdet;
+  
+  if (verbose) { 
+    printf("Celerite params:\n");
+    printf("a+comp=%25.17lf\n", a_comp[0]);
+    printf("b+comp=%25.17lf\n", b_comp[0]);
+    printf("c+comp=%25.17lf\n", c_comp[0]);
+    printf("d+comp=%25.17lf\n", d_comp[0]);
+    printf("diffs=%lf\n", diffs);
+    printf("logdet=%lf\n", logdet);
+    printf("llike=%lf\n", llike);
+  
+    VectorXd prediction = solver.predict(dy, x);
+ 
+    char tmtefstr[1000];
+    char str1;
+    if (rvflag) {
+      str1 = "rv";
+    } else {
+      str1 = "lc"; 
+    }
+    strcpy(tmtefstr, str1);
+    strcpy(tmtefstr, "_");
+    strcat(tmtefstr, OUTSTR);
+    strcat(tmtefstr, ".gp_");
+    strcat(tmtefstr, str1);
+    strcat(tmtefstr, "out");
+    FILE *tmtef;
+    tmtef = fopen(tmtefstr, "a");
+    long ijk;
+    for (ijk=0; ijk<maxil; ijk++) {
+      fprintf(tmtef, "%.12lf \n", prediction[ijk]);
+    }
+    fclose(tmtef);// = openf(tmtstr,"w");
+  }
+
+  free(yvarp);
+  free(diffys);
+
+  return xisq;
+
+}
+ 
+
+
+
 // Compute lightcurve if only 1 star / luminous object
 double ***dpintegrator_single (double ***int_in, double **tfe, double **tve, double **nte, int *cadencelist) {
 
@@ -2939,14 +3070,16 @@ double *timedlc ( double *times, int *cadences, long ntimes, double **transitarr
     }
 
     double *fluxlist = malloc(ntimes*sofd);
-    double rsinau = RSUNAU; //0.0046491; // solar radius in au
+    const double rsinau = RSUNAU; //0.0046491; // solar radius in au
+    const double rstarau = rstar*rsinau;
+
 
     double xstart[nplanets];
     double ystart[nplanets];
     int i;
     for (i=0; i<nplanets; i++) {
-       xstart[i] = (transitarr[i][1] - transitarr[i][3]*(transitarr[i][0]-times[0]))/(rstar*rsinau);
-       ystart[i] = (transitarr[i][2] - transitarr[i][4]*(transitarr[i][0]-times[0]))/(rstar*rsinau);
+       xstart[i] = (transitarr[i][1] - transitarr[i][3]*(transitarr[i][0]-times[0]))/(rstarau);
+       ystart[i] = (transitarr[i][2] - transitarr[i][4]*(transitarr[i][0]-times[0]))/(rstarau);
     }
 
     circle sun = {0.,0., 1.};
@@ -2980,8 +3113,8 @@ double *timedlc ( double *times, int *cadences, long ntimes, double **transitarr
         flux = mttr_flux_general(system, nplanets+1, g0, g1, g2);// /nflux; 
         fluxlist[n] = flux;
         for (i=0; i<nplanets; i++) {
-            system[i+1].x0 += transitarr[i][3]*(t_next-t_cur)/(rstar*rsinau);
-            system[i+1].y0 += transitarr[i][4]*(t_next-t_cur)/(rstar*rsinau);
+            system[i+1].x0 += transitarr[i][3]*(t_next-t_cur)/(rstarau);
+            system[i+1].y0 += transitarr[i][4]*(t_next-t_cur)/(rstarau);
         }
         j=jj;
       }
@@ -2995,8 +3128,8 @@ double *timedlc ( double *times, int *cadences, long ntimes, double **transitarr
         flux = mttr_flux_general(system, nplanets+1, g0, g1, g2);// /nflux; 
         fluxlist[n] = flux;
         for (i=0; i<nplanets; i++) {
-            system[i+1].x0 += transitarr[i][3]*(t_next-t_cur)/(rstar*rsinau);
-            system[i+1].y0 += transitarr[i][4]*(t_next-t_cur)/(rstar*rsinau);
+            system[i+1].x0 += transitarr[i][3]*(t_next-t_cur)/(rstarau);
+            system[i+1].y0 += transitarr[i][4]*(t_next-t_cur)/(rstarau);
         }
       }
       fluxlist[ntimes-1] = mttr_flux_general(system, nplanets+1, g0, g1, g2);
@@ -3833,102 +3966,7 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
   if (! CELERITE) { 
     for (il=0; il<maxil; il++) xisq += dev[il+1]*dev[il+1];
   } else { // if celerite
-    double *xs = flux_rvs[0][0];
-    long maxil = (long) xs[0];
-    double *trueys = flux_rvs[0][1];
-    double *modelys = flux_rvs[0][2];
-    double *es = flux_rvs[0][3];
-    double *diffys = malloc(sofd*maxil);
-    for (il=0; il<maxil; il++) { 
-      diffys[il] = trueys[il+1]-modelys[il+1];
-    }
-    double *yvarp = malloc(sofd*maxil);
-    for (il=0; il<maxil; il++) { 
-      yvarp[il] = es[il+1]*es[il+1]; 
-    }
-    double *xp = &xs[1]; 
-    
-    int j_real = 0;
-    int j_complex;
-    double jitter, k1, k2, k3, S0, w0, Q;
-    jitter = p[npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+0];
-    S0 = p[npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+1];
-    w0 = p[npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+2];
-    Q = p[npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+3];
-    if (Q >= 0.5) {
-      j_complex = 1;
-    } else {
-      j_complex = 2;
-    }
-    VectorXd a_real(j_real),
-            c_real(j_real),
-            a_comp(j_complex),
-            b_comp(j_complex),
-            c_comp(j_complex),
-            d_comp(j_complex);
-    if (Q >= 0.5) {
-      k1 = S0*w0*Q;
-      k2 = sqrt(4.*Q*Q - 1.);
-      k3 = w0/(2.*Q);
-      a_comp << k1;
-      b_comp << k1/k2;
-      c_comp << k3;
-      d_comp << k3*k2;
-    } else {
-      j_complex = 2;
-      k1 = 0.5*S0*w0*Q;
-      k2 = sqrt(1. - 4.*Q*Q);
-      k3 = w0/(2.*Q);
-      a_comp << k1*(1. + 1./k2), k1*(1. - 1./k2);
-      b_comp << 0., 0.;
-      c_comp << k3*(1. - k2), k3*(1. + k2);
-      d_comp << 0., 0.;
-    }
-
-    VectorXd x = VectorXd::Map(xp, maxil);
-    VectorXd yvar = VectorXd::Map(yvarp, maxil);
-    VectorXd dy = VectorXd::Map(diffys, maxil);
-  
-    celerite::solver::CholeskySolver<double> solver;
-    solver.compute(
-          jitter,
-          a_real, c_real,
-          a_comp, b_comp, c_comp, d_comp,
-          x, yvar  // Note: this is the measurement _variance_
-      );
-  
-    // see l.186-192 in celerite.py
-    double logdet, diffs, llike;
-    logdet = solver.log_determinant();
-    diffs = solver.dot_solve(dy); 
-    llike = -0.5 * (diffs + logdet); 
-  
-    xisq = diffs+logdet;
-   
-    printf("Celerite params:\n");
-    printf("a+comp=%25.17lf\n", a_comp[0]);
-    printf("b+comp=%25.17lf\n", b_comp[0]);
-    printf("c+comp=%25.17lf\n", c_comp[0]);
-    printf("d+comp=%25.17lf\n", d_comp[0]);
-    printf("diffs=%lf\n", diffs);
-    printf("logdet=%lf\n", logdet);
-    printf("llike=%lf\n", llike);
-
-    VectorXd prediction = solver.predict(dy, x);
-    char tmtefstr[1000];
-    strcpy(tmtefstr, "lc_");
-    strcat(tmtefstr, OUTSTR);
-    strcat(tmtefstr, ".gp_lcout");
-    FILE *tmtef;
-    tmtef = fopen(tmtefstr, "a");
-    long ijk;
-    for (ijk=0; ijk<maxil; ijk++) {
-      fprintf(tmtef, "%.12lf \n", prediction[ijk]);
-    }
-    fclose(tmtef);// = openf(tmtstr,"w");
- 
-    free(yvarp);
-    free(diffys);
+    xisq = celerite_fit(flux_rvs, p, 0, 0, 1);
   }
 
   printf("xisq=%lf\n", xisq);
@@ -3957,102 +3995,7 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
       for (il=0; il<maxil; il++) xisq += rvdev[il+1]*rvdev[il+1];
       free(rvdev);
     } else { // if rvcelerite
-      double *xs = flux_rvs[1][0];
-      long maxil = (long) xs[0];
-      double *trueys = flux_rvs[1][1];
-      double *modelys = flux_rvs[1][2];
-      double *es = flux_rvs[1][3];
-      double *diffys = malloc(sofd*maxil);
-      for (il=0; il<maxil; il++) { 
-        diffys[il] = trueys[il+1]-modelys[il+1];
-      }
-      double *yvarp = malloc(sofd*maxil);
-      for (il=0; il<maxil; il++) { 
-        yvarp[il] = es[il+1]*es[il+1]; 
-      }
-      double *xp = &xs[1]; 
-    
-      int j_real = 0;
-      int j_complex;
-      double jitter, k1, k2, k3, S0, w0, Q;
-      jitter = p[npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+0];
-      S0 = p[npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+1];
-      w0 = p[npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+2];
-      Q = p[npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+3];
-      if (Q >= 0.5) {
-        j_complex = 1;
-      } else {
-        j_complex = 2;
-      }
-      VectorXd a_real(j_real),
-              c_real(j_real),
-              a_comp(j_complex),
-              b_comp(j_complex),
-              c_comp(j_complex),
-              d_comp(j_complex);
-      if (Q >= 0.5) {
-        k1 = S0*w0*Q;
-        k2 = sqrt(4.*Q*Q - 1.);
-        k3 = w0/(2.*Q);
-        a_comp << k1;
-        b_comp << k1/k2;
-        c_comp << k3;
-        d_comp << k3*k2;
-      } else {
-        j_complex = 2;
-        k1 = 0.5*S0*w0*Q;
-        k2 = sqrt(1. - 4.*Q*Q);
-        k3 = w0/(2.*Q);
-        a_comp << k1*(1. + 1./k2), k1*(1. - 1./k2);
-        b_comp << 0., 0.;
-        c_comp << k3*(1. - k2), k3*(1. + k2);
-        d_comp << 0., 0.;
-      }
-   
-      VectorXd x = VectorXd::Map(xp, maxil);
-      VectorXd yvar = VectorXd::Map(yvarp, maxil);
-      VectorXd dy = VectorXd::Map(diffys, maxil);
-    
-      celerite::solver::CholeskySolver<double> solver;
-      solver.compute(
-            jitter,
-            a_real, c_real,
-            a_comp, b_comp, c_comp, d_comp,
-            x, yvar  // Note: this is the measurement _variance_
-        );
-    
-      // see l.186-192 in celerite.py
-      double logdet, diffs, llike;
-      logdet = solver.log_determinant();
-      diffs = solver.dot_solve(dy); 
-      llike = -0.5 * (diffs + logdet); 
-    
-      xisq += diffs+logdet;
-     
-      printf("a+comp=%25.17lf\n", a_comp[0]);
-      printf("b+comp=%25.17lf\n", b_comp[0]);
-      printf("c+comp=%25.17lf\n", c_comp[0]);
-      printf("d+comp=%25.17lf\n", d_comp[0]);
-      printf("diffs=%lf\n", diffs);
-      printf("logdet=%lf\n", logdet);
-      printf("llike=%lf\n", llike);
-  
-      VectorXd prediction = solver.predict(dy, x);
-      char tmtefstr[1000];
-      strcpy(tmtefstr, "rv_");
-      strcat(tmtefstr, OUTSTR);
-      strcat(tmtefstr, ".gp_rvout");
-      FILE *tmtef;
-      tmtef = fopen(tmtefstr, "a");
-      long ijk;
-      for (ijk=0; ijk<maxil; ijk++) {
-        fprintf(tmtef, "%.12lf \n", prediction[ijk]/MPSTOAUPD);
-      }
-      fclose(tmtef);// = openf(tmtstr,"w");
-   
-      free(yvarp);
-      free(diffys);
-  
+      xisq += celerite_fit(flux_rvs, p, 0, 1, 1);
     }
   }
 
@@ -4393,93 +4336,7 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
     if (! CELERITE) { 
       for (il=0; il<maxil; il++) xisqtemp += dev[il+1]*dev[il+1];
     } else { // if celerite
-      double *xs = flux_rvs[0][0];
-          long maxil = (long) xs[0];
-      double *trueys = flux_rvs[0][1];
-      double *modelys = flux_rvs[0][2];
-      double *es = flux_rvs[0][3];
-      double *diffys = malloc(sofd*maxil);
-      for (il=0; il<maxil; il++) { 
-         diffys[il] = trueys[il+1]-modelys[il+1];
-      }
-      double *yvarp = malloc(sofd*maxil);
-      for (il=0; il<maxil; il++) { 
-         yvarp[il] = es[il+1]*es[il+1]; 
-      }
-      double *xp = &xs[1]; 
-      
-      int j_real = 0;
-      int j_complex;
-      double jitter, k1, k2, k3, S0, w0, Q;
-      jitter = p0local[pperwalker*i+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+0];// p[npl][5+RVJITTERTOT+TTVJITTERTOT+0];
-      S0 = p0local[pperwalker*i+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+1]; //p[npl][5+RVJITTERTOT+TTVJITTERTOT+1];
-      w0 = p0local[pperwalker*i+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+2]; //p[npl][5+RVJITTERTOT+TTVJITTERTOT+2];
-      Q = p0local[pperwalker*i+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+3];//p[npl][5+RVJITTERTOT+TTVJITTERTOT+3];
-      if (Q >= 0.5) {
-        j_complex = 1;
-      } else {
-        j_complex = 2;
-      }
-      VectorXd a_real(j_real),
-              c_real(j_real),
-              a_comp(j_complex),
-              b_comp(j_complex),
-              c_comp(j_complex),
-              d_comp(j_complex);
-      if (Q >= 0.5) {
-        k1 = S0*w0*Q;
-        k2 = sqrt(4.*Q*Q - 1.);
-        k3 = w0/(2.*Q);
-        a_comp << k1;
-        b_comp << k1/k2;
-        c_comp << k3;
-        d_comp << k3*k2;
-      } else {
-        j_complex = 2;
-        k1 = 0.5*S0*w0*Q;
-        k2 = sqrt(1. - 4.*Q*Q);
-        k3 = w0/(2.*Q);
-        a_comp << k1*(1. + 1./k2), k1*(1. - 1./k2);
-        b_comp << 0., 0.;
-        c_comp << k3*(1. - k2), k3*(1. + k2);
-        d_comp << 0., 0.;
-      }
-    
-   
-      printf("%lf %lf %lf %lf\n", a_comp[0], b_comp[0], c_comp[0], d_comp[0]);
-  
-    
-      VectorXd x = VectorXd::Map(xp, maxil);
-      VectorXd yvar = VectorXd::Map(yvarp, maxil);
-      VectorXd dy = VectorXd::Map(diffys, maxil);
-   
-      celerite::solver::CholeskySolver<double> solver;
-      try {
-      solver.compute(
-            jitter,
-            a_real, c_real,
-            a_comp, b_comp, c_comp, d_comp,
-            x, yvar  // Note: this is the measurement _variance_
-        );
-      } catch ( std::exception e1 ) {
-        xisqtemp = HUGE_VAL;
-        goto celeritefail;
-      }
-    
-      // see l.186-192 in celerite.py
-      double logdet, diffs, llike;
-      logdet = solver.log_determinant();
-      diffs = solver.dot_solve(dy); 
-      llike = -0.5 * (diffs + logdet); // hm, this is wrong 
-  
-    
-    
-      xisqtemp = diffs+logdet;
-      printf("xsiqtemp=%lf\n", xisqtemp);
-  
-      free(yvarp);
-      free(diffys);
-  
+      xisqtemp = celerite_fit(flux_rvs, p0local, i, 0, 0); 
     }
     double *newelist;
  
@@ -4510,101 +4367,7 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
   
   
       } else { // if rvcelerite
-        double *xs = flux_rvs[1][0];
-        long maxil = (long) xs[0];
-        double *trueys = flux_rvs[1][1];
-        double *modelys = flux_rvs[1][2];
-        double *es = flux_rvs[1][3];
-        double *diffys = malloc(sofd*maxil);
-        for (il=0; il<maxil; il++) { 
-           diffys[il] = trueys[il+1]-modelys[il+1];
-        }
-        double *yvarp = malloc(sofd*maxil);
-        for (il=0; il<maxil; il++) { 
-           yvarp[il] = es[il+1]*es[il+1]; 
-        }
-        double *xp = &xs[1]; 
-        
-        int j_real = 0;
-        int j_complex;
-        double jitter, k1, k2, k3, S0, w0, Q;
-        jitter = p0local[pperwalker*i+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+0];// p[npl][5+RVJITTERTOT+TTVJITTERTOT+0];
-        S0 = p0local[pperwalker*i+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+1]; //p[npl][5+RVJITTERTOT+TTVJITTERTOT+1];
-        w0 = p0local[pperwalker*i+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+2]; //p[npl][5+RVJITTERTOT+TTVJITTERTOT+2];
-        Q = p0local[pperwalker*i+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+3];//p[npl][5+RVJITTERTOT+TTVJITTERTOT+3];
-        if (Q >= 0.5) {
-          j_complex = 1;
-        } else {
-          j_complex = 2;
-        }
-        VectorXd a_real(j_real),
-                c_real(j_real),
-                a_comp(j_complex),
-                b_comp(j_complex),
-                c_comp(j_complex),
-                d_comp(j_complex);
-        if (Q >= 0.5) {
-          k1 = S0*w0*Q;
-          k2 = sqrt(4.*Q*Q - 1.);
-          k3 = w0/(2.*Q);
-          a_comp << k1;
-          b_comp << k1/k2;
-          c_comp << k3;
-          d_comp << k3*k2;
-        } else {
-          j_complex = 2;
-          k1 = 0.5*S0*w0*Q;
-          k2 = sqrt(1. - 4.*Q*Q);
-          k3 = w0/(2.*Q);
-          a_comp << k1*(1. + 1./k2), k1*(1. - 1./k2);
-          b_comp << 0., 0.;
-          c_comp << k3*(1. - k2), k3*(1. + k2);
-          d_comp << 0., 0.;
-        }
-     
-      
-        VectorXd x = VectorXd::Map(xp, maxil);
-        VectorXd yvar = VectorXd::Map(yvarp, maxil);
-        VectorXd dy = VectorXd::Map(diffys, maxil);
-      
-        celerite::solver::CholeskySolver<double> solver;
-        solver.compute(
-              jitter,
-              a_real, c_real,
-              a_comp, b_comp, c_comp, d_comp,
-              x, yvar  // Note: this is the measurement _variance_
-          );
-      
-        // see l.186-192 in celerite.py
-        double logdet, diffs, llike;
-        logdet = solver.log_determinant();
-        diffs = solver.dot_solve(dy); 
-        llike = -0.5 * (diffs + logdet); 
-      
-        xisqtemp += diffs+logdet;
-       
-#if (demcmc_compile==0)
-        printf("diffs=%lf\n", diffs);
-        printf("logdet=%lf\n", logdet);
-        printf("llike=%lf\n", llike);
-    
-        VectorXd prediction = solver.predict(dy, x);
-        char tmtefstr[1000];
-        strcpy(tmtefstr, "rv_");
-        strcat(tmtefstr, OUTSTR);
-        strcat(tmtefstr, ".gp_rvout");
-        FILE *tmtef;
-        tmtef = fopen(tmtefstr, "a");
-        long ijk;
-        for (ijk=0; ijk<maxil; ijk++) {
-          fprintf(tmtef, "%.12lf \n", prediction[ijk]);
-        }
-        fclose(tmtef);// = openf(tmtstr,"w");
-     
-#endif        
-        free(yvarp);
-        free(diffys);
-      }
+        xisqtemp += celerite_fit(flux_rvs, p0local, i, 1, 0); 
     }
 
     if (TTVCHISQ) {
@@ -4784,83 +4547,7 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
         if (! CELERITE) { 
           for (il=0; il<maxil; il++) nxisqtemp += ndev[il+1]*ndev[il+1];
         } else { // if celerite
-          double *xs = nflux_rvs[0][0];
-          long maxil = (long) xs[0];
-          double *trueys = nflux_rvs[0][1];
-          double *modelys = nflux_rvs[0][2];
-          double *es = nflux_rvs[0][3];
-          double *diffys = malloc(sofd*maxil);
-          for (il=0; il<maxil; il++) { 
-             diffys[il] = trueys[il+1]-modelys[il+1];
-          }
-          double *yvarp = malloc(sofd*maxil);
-          for (il=0; il<maxil; il++) { 
-             yvarp[il] = es[il+1]*es[il+1]; 
-          }
-          double *xp = &xs[1]; 
-          
-          int j_real = 0;
-          int j_complex;
-          double jitter, k1, k2, k3, S0, w0, Q;
-          jitter = p0local[pperwalker*nw+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+0];// p[npl][5+RVJITTERTOT+TTVJITTERTOT+0];
-          S0 = p0local[pperwalker*nw+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+1]; //p[npl][5+RVJITTERTOT+TTVJITTERTOT+1];
-          w0 = p0local[pperwalker*nw+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+2]; //p[npl][5+RVJITTERTOT+TTVJITTERTOT+2];
-          Q = p0local[pperwalker*nw+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+3];//p[npl][5+RVJITTERTOT+TTVJITTERTOT+3];
-          if (Q >= 0.5) {
-            j_complex = 1;
-          } else {
-            j_complex = 2;
-          }
-          VectorXd a_real(j_real),
-                  c_real(j_real),
-                  a_comp(j_complex),
-                  b_comp(j_complex),
-                  c_comp(j_complex),
-                  d_comp(j_complex);
-          if (Q >= 0.5) {
-            k1 = S0*w0*Q;
-            k2 = sqrt(4.*Q*Q - 1.);
-            k3 = w0/(2.*Q);
-            a_comp << k1;
-            b_comp << k1/k2;
-            c_comp << k3;
-            d_comp << k3*k2;
-          } else {
-            j_complex = 2;
-            k1 = 0.5*S0*w0*Q;
-            k2 = sqrt(1. - 4.*Q*Q);
-            k3 = w0/(2.*Q);
-            a_comp << k1*(1. + 1./k2), k1*(1. - 1./k2);
-            b_comp << 0., 0.;
-            c_comp << k3*(1. - k2), k3*(1. + k2);
-            d_comp << 0., 0.;
-          }
-        
-        
-        
-          VectorXd x = VectorXd::Map(xp, maxil);
-          VectorXd yvar = VectorXd::Map(yvarp, maxil);
-          VectorXd dy = VectorXd::Map(diffys, maxil);
-        
-          celerite::solver::CholeskySolver<double> solver;
-          solver.compute(
-                jitter,
-                a_real, c_real,
-                a_comp, b_comp, c_comp, d_comp,
-                x, yvar  // Note: this is the measurement _variance_
-            );
-        
-          // see l.186-192 in celerite.py
-          double logdet, diffs, llike;
-          logdet = solver.log_determinant();
-          diffs = solver.dot_solve(dy); 
-          llike = -0.5 * (diffs + logdet); 
-        
-          nxisqtemp = diffs+logdet;
-        
-          free(yvarp);
-          free(diffys);
-      
+          nxisqtemp = celerite_fit(nfluxrvs, p0local, nw, 0, 0);
         }
         double *newelist;
         if (RVS) {
@@ -4888,98 +4575,7 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
             free(rvdev);
   
           } else { // if rvcelerite
-            double *xs = nflux_rvs[1][0];
-            long maxil = (long) xs[0];
-            double *trueys = nflux_rvs[1][1];
-            double *modelys = nflux_rvs[1][2];
-            double *es = nflux_rvs[1][3];
-            double *diffys = malloc(sofd*maxil);
-            for (il=0; il<maxil; il++) { 
-               diffys[il] = trueys[il+1]-modelys[il+1];
-            }
-            double *yvarp = malloc(sofd*maxil);
-            for (il=0; il<maxil; il++) { 
-               yvarp[il] = es[il+1]*es[il+1]; 
-            }
-            double *xp = &xs[1]; 
-            
-            int j_real = 0;
-            int j_complex;
-            double jitter, k1, k2, k3, S0, w0, Q;
-            jitter = p0local[pperwalker*nw+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+0];// p[npl][5+RVJITTERTOT+TTVJITTERTOT+0];
-            S0 = p0local[pperwalker*nw+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+1]; //p[npl][5+RVJITTERTOT+TTVJITTERTOT+1];
-            w0 = p0local[pperwalker*nw+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+2]; //p[npl][5+RVJITTERTOT+TTVJITTERTOT+2];
-            Q = p0local[pperwalker*nw+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+3];//p[npl][5+RVJITTERTOT+TTVJITTERTOT+3];
-            if (Q >= 0.5) {
-              j_complex = 1;
-            } else {
-              j_complex = 2;
-            }
-            VectorXd a_real(j_real),
-                    c_real(j_real),
-                    a_comp(j_complex),
-                    b_comp(j_complex),
-                    c_comp(j_complex),
-                    d_comp(j_complex);
-            if (Q >= 0.5) {
-              k1 = S0*w0*Q;
-              k2 = sqrt(4.*Q*Q - 1.);
-              k3 = w0/(2.*Q);
-              a_comp << k1;
-              b_comp << k1/k2;
-              c_comp << k3;
-              d_comp << k3*k2;
-            } else {
-              j_complex = 2;
-              k1 = 0.5*S0*w0*Q;
-              k2 = sqrt(1. - 4.*Q*Q);
-              k3 = w0/(2.*Q);
-              a_comp << k1*(1. + 1./k2), k1*(1. - 1./k2);
-              b_comp << 0., 0.;
-              c_comp << k3*(1. - k2), k3*(1. + k2);
-              d_comp << 0., 0.;
-            }
-          
-            VectorXd x = VectorXd::Map(xp, maxil);
-            VectorXd yvar = VectorXd::Map(yvarp, maxil);
-            VectorXd dy = VectorXd::Map(diffys, maxil);
-          
-            celerite::solver::CholeskySolver<double> solver;
-            solver.compute(
-                  jitter,
-                  a_real, c_real,
-                  a_comp, b_comp, c_comp, d_comp,
-                  x, yvar  // Note: this is the measurement _variance_
-              );
-          
-            // see l.186-192 in celerite.py
-            double logdet, diffs, llike;
-            logdet = solver.log_determinant();
-            diffs = solver.dot_solve(dy); 
-            llike = -0.5 * (diffs + logdet); 
-          
-            nxisqtemp += diffs+logdet;
-           
-#if (demcmc_compile==0)
-        
-            VectorXd prediction = solver.predict(dy, x);
-            char tmtefstr[1000];
-            strcpy(tmtefstr, "rv_");
-            strcat(tmtefstr, OUTSTR);
-            strcat(tmtefstr, ".gp_rvout");
-            FILE *tmtef;
-            tmtef = fopen(tmtefstr, "a");
-            long ijk;
-            for (ijk=0; ijk<maxil; ijk++) {
-              fprintf(tmtef, "%.12lf \n", prediction[ijk]);
-            }
-            fclose(tmtef);// = openf(tmtstr,"w");
-         
-#endif
-          
-            free(yvarp);
-            free(diffys);
-        
+            nxisqtemp += celerite_fit(nfluxrvs, p0local, nw, 1, 0);
           }
         }
         if (TTVCHISQ) {
