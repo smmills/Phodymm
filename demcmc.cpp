@@ -93,14 +93,14 @@ double normalpdf (double x) {
 }
 
 
-// Spectroscopy Constraints - Currently only works for sinngle star. Don't use it for multistar. 
+// Spectroscopy Constraints - Currently only works for single star. Don't use it for multistar. 
 int SPECTROSCOPY;
 // Assumes assymetric Gaussian
 double SPECRADIUS;
 double SPECERRPOS;
 double SPECERRNEG;
 
-// Spectroscopy Constraints - Currently only works for sinngle star. Don't use it for multistar. 
+// Spectroscopy Constraints - Currently only works for single star. Don't use it for multistar. 
 int MASSSPECTROSCOPY;
 // Assumes assymetric Gaussian
 double SPECMASS;
@@ -121,6 +121,7 @@ int MULTISTAR;
 int NBODIES;
 int PPERPLAN;
 int PSTAR = 5;  // Number of parameters for central star
+int PPERWALKER;
 char *OUTSTR;
 int NPL;
 double EPOCH;
@@ -177,8 +178,6 @@ double AFRACSTABLE = 0.10;
 // Variables for Fitting additional TTVs 
 // as of now the ttv input files MUST be SORTED numerically and at same epoch
 int TTVCHISQ;
-//char **TTVFILENAMES;
-//char TTVFILENAME1[] = "ttvsecondary.txt";
 long **NTTV;  //number
 double **TTTV; // time
 double **ETTV; //error
@@ -2390,6 +2389,164 @@ double ***dpintegrator_multi(double ***int_in, double **tfe, double **tve, int *
 
 
 
+
+// Helper for checking if certain parameters are out of 
+int check_boundaries( double *p0local, long nw) {
+  
+  int notallowed = 0;
+  const int npl = NPL;
+  const int pperwalker = PPERWALKER;
+  const int pperplan = PPERPLAN;
+  const int sofd = SOFD;
+  int ip;
+ 
+  for (ip=0; ip<npl; ip++) { 
+    // make sure i and Omega angles are not cycling through:
+    if ( p0local[nw*pperwalker+ip*pperplan+4] < 0.0 || p0local[nw*pperwalker+ip*pperplan+4] > 180.0 ) notallowed=1;
+    if ( p0local[nw*pperwalker+ip*pperplan+5] < -180.0 || p0local[nw*pperwalker+ip*pperplan+5] > 180.0 ) notallowed=1;
+    // make sure i>=90
+    if ( IGT90 && (p0local[nw*pperwalker+ip*pperplan+4] < 90.0) ) notallowed=1;
+    // make sure m>=0
+    if ( MGT0 && (p0local[nw*pperwalker+ip*pperplan+6] < 0.0) ) notallowed=1;
+    //make sure density is allowed
+    if (DENSITYCUTON) {
+      double massg = p0local[nw*pperwalker+ip*pperplan+6] / MSOMJ * MSUNGRAMS; 
+      double radcm = p0local[nw*pperwalker+npl*pperplan+1] * p0local[nw*pperwalker+ip*pperplan+7] * RSUNCM;
+      double rhogcc = massg / (4./3.*M_PI*radcm*radcm*radcm);
+      if (rhogcc > MAXDENSITY[ip]) notallowed=1;
+    }
+  }
+
+  if ( DIGT0 && (p0local[nw*pperwalker+npl*pperplan+4] < 0.0) ) notallowed=1;
+
+  // check that RVJITTER >= 0
+  if (RVS) {
+    if (RVJITTERFLAG) {
+      int ki;
+      for (ki=0; ki<RVJITTERTOT; ki++) {
+        if (p0local[nw*pperwalker+npl*pperplan+(5+ki)] < 0.0) {
+          notallowed=1;
+        }
+      }
+    }
+  }
+  
+  // check that celerite terms >= 0
+  if (CELERITE) {
+      int ki;
+      for (ki=0; ki<NCELERITE; ki++) {
+        if (p0local[nw*pperwalker+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+ki] < 0.0) {
+          notallowed=1;
+        }
+      }
+  }
+  if (RVCELERITE) {
+      int ki;
+      for (ki=0; ki<NRVCELERITE; ki++) {
+        if (p0local[nw*pperwalker+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+CELERITE*4+ki] < 0.0) {
+          notallowed=1;
+        }
+      }
+  }
+  
+  double* evector = malloc(npl*sofd);
+  if (ECUTON) {
+    if (SQRTE) {
+      int i0;
+      for (i0=0; i0<npl; i0++) {
+        evector[i0] = pow(sqrt( pow(p0local[nw*pperwalker+i0*pperplan+2], 2) + pow(p0local[nw*pperwalker+i0*pperplan+3], 2) ), 2);
+      }
+    } else {
+      int i0;
+      for (i0=0; i0<npl; i0++) {
+        evector[i0] = sqrt( pow(p0local[nw*pperwalker+i0*pperplan+2], 2) + pow(p0local[nw*pperwalker+i0*pperplan+3], 2) );
+      }
+    }
+    // make sure e_d cos  w_d is within its range
+    double* emax = EMAX;
+    int i0;
+    for (i0=0; i0<npl; i0++) {
+      if (evector[i0] > emax[i0] ) notallowed=1;
+    }
+  }
+  
+  //make sure ld coefficients in range
+  if ( DILUTERANGE && (p0local[nw*pperwalker+npl*pperplan+2] < 0.0 || p0local[nw*pperwalker+npl*pperplan+2] > 1.0 || p0local[nw*pperwalker+npl*pperplan+3] < 0.0 || p0local[nw*pperwalker+npl*pperplan+3] > 1.0) ) notallowed=1;
+ 
+  free(evector);
+ 
+  return notallowed;
+}
+
+
+
+// Helper for computing the priors
+double compute_priors(double *p0local, int i) {
+
+    double xisqtemp = 0.;
+    const int pperwalker = PPERWALKER;
+    const int pperplan = PPERPLAN;
+    const int sofd = SOFD;
+    const int npl = NPL;
+
+    double photoradius;
+    photoradius = p0local[i*pperwalker+npl*pperplan+1]; 
+    double photomass;
+    photomass = p0local[i*pperwalker+npl*pperplan+0]; 
+    double* evector; 
+    evector = malloc(npl*sofd);
+
+    if (EPRIOR) {
+      if (SQRTE) {
+        int i0;
+        for (i0=0; i0<npl; i0++) {
+          evector[i0] = pow(sqrt( pow(p0local[i*pperwalker+i0*pperplan+2], 2) + pow(p0local[i*pperwalker+i0*pperplan+3], 2) ), 2);
+        }
+      } else {
+        int i0;
+        for (i0=0; i0<npl; i0++) {
+          evector[i0] = sqrt( pow(p0local[i*pperwalker+i0*pperplan+2], 2) + pow(p0local[i*pperwalker+i0*pperplan+3], 2) );
+        }
+      }
+      int i0;
+      for (i0=0; i0<NPL; i0++) {
+        if (EPRIORV[i0]) {
+          double priorprob;
+          if (EPRIOR==1) {
+            priorprob = rayleighpdf(evector[i0]);
+          } else if (EPRIOR==2) {
+            priorprob = normalpdf(evector[i0]);
+          }
+          xisqtemp += -2.0*log( priorprob );
+        }
+      }
+    }
+
+    if (SPECTROSCOPY) {
+      if (photoradius > SPECRADIUS) xisqtemp += pow( (photoradius - SPECRADIUS) / SPECERRPOS, 2 );
+      else xisqtemp += pow( (photoradius - SPECRADIUS) / SPECERRNEG, 2 );
+    }
+
+    if (MASSSPECTROSCOPY) {
+      if (photomass > SPECMASS) xisqtemp += pow( (photomass - SPECMASS) / MASSSPECERRPOS, 2 );
+      else xisqtemp += pow( (photomass - SPECMASS) / MASSSPECERRNEG, 2 );
+    }
+
+    if (INCPRIOR) {
+      int i0;
+      for (i0=0; i0<npl; i0++) {
+        xisqtemp += -2.0*log( sin(p0local[i*pperwalker+i0*pperplan+4] *M_PI/180.) ); 
+      }
+    }
+
+  free(evector);
+
+  return xisqtemp;
+
+}
+
+
+
 // Compute lightcurve if only 1 star / luminous object
 double ***dpintegrator_single (double ***int_in, double **tfe, double **tve, double **nte, int *cadencelist) {
 
@@ -2585,12 +2742,8 @@ double ***dpintegrator_single (double ***int_in, double **tfe, double **tve, dou
   double tbvmax = 36500.0;
 #endif
 
-
-
   double **tmte;
   double **rvtmte;
-
-
 
   double dist2divisor=DIST2DIVISOR;
   double baryz;
@@ -2627,8 +2780,9 @@ double ***dpintegrator_single (double ***int_in, double **tfe, double **tve, dou
   printf("t=%lf tepoch=%lf t1=%lf t0=%lf h=%lf\n", t, tstart, t1, t0, h); 
 #endif
 
-  while (t < t1 ) {      
 
+  // Main forward integration loop
+  while (t < t1 ) {      
 
 #if ( demcmc_compile==0 )
     int printtime=0;
@@ -3479,6 +3633,7 @@ double ***dpintegrator_single (double ***int_in, double **tfe, double **tve, dou
 
 
 // Read the formatted input file
+// Sets global variables
 int getinput(char fname[]) {
 
   const int sofd = SOFD;
@@ -3692,6 +3847,8 @@ int getinput(char fname[]) {
     for (i=0; i<npl; i++) memcpy(&STEP[i*PPERPLAN], &PSTEP[0], PPERPLAN*sofd);
     memcpy(&STEP[NPL*PPERPLAN], &SSTEP[0], PSTAR*sofd);
   }
+
+  PPERWALKER = NPL*PPERPLAN + PSTAR;
 
   fclose(inputf);
   return 0;
@@ -4059,26 +4216,26 @@ double ***dsetup2 (double *p, const int npl){
     fprintf(outfile2, "%.15lf ; c1\n", c1);
     fprintf(outfile2, "%.15lf ; c2\n", c2);
     fprintf(outfile2, "%.15lf ; dilute\n", dilute);
-            if (RVJITTERFLAG) {
-              for (i=0; i<RVJITTERTOT; i++) {
-                fprintf(outfile2, "%.15lf ; rvjitter \n", p[npl*pperplan+5+i]);
-              }
-            }
-            if (TTVJITTERFLAG) {
-              for (i=0; i<TTVJITTERTOT; i++) {
-                fprintf(outfile2, "%.15lf ; rvjitter \n", p[npl*pperplan+5+RVJITTERTOT+i]);
-              }
-            }
-            if (CELERITE) {
-              for (i=0; i<NCELERITE; i++) {
-                fprintf(outfile2, "%.15lf ; celerite \n", p[npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+i]);
-              }
-            }
-            if (RVCELERITE) {
-              for (i=0; i<NRVCELERITE; i++) {
-                fprintf(outfile2, "%.15lf ; RV celerite \n", p[npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+i]);
-              }
-            }
+    if (RVJITTERFLAG) {
+      for (i=0; i<RVJITTERTOT; i++) {
+        fprintf(outfile2, "%.15lf ; rvjitter \n", p[npl*pperplan+5+i]);
+      }
+    }
+    if (TTVJITTERFLAG) {
+      for (i=0; i<TTVJITTERTOT; i++) {
+        fprintf(outfile2, "%.15lf ; rvjitter \n", p[npl*pperplan+5+RVJITTERTOT+i]);
+      }
+    }
+    if (CELERITE) {
+      for (i=0; i<NCELERITE; i++) {
+        fprintf(outfile2, "%.15lf ; celerite \n", p[npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+i]);
+      }
+    }
+    if (RVCELERITE) {
+      for (i=0; i<NRVCELERITE; i++) {
+        fprintf(outfile2, "%.15lf ; RV celerite \n", p[npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+i]);
+      }
+    }
     fprintf(outfile2, " ; These coordinates are Jacobian \n");
 
     fclose(outfile2);
@@ -5804,7 +5961,7 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
 
   printf("Initialized Walkers\n");
 
-  int pperwalker = npl*pperplan+pstar;
+  int pperwalker = PPERWALKER; //npl*pperplan+pstar;
   int totalparams = nwalkers*pperwalker;
   double *p0local = malloc(totalparams*sofd);
   double **p0localN; 
@@ -6112,56 +6269,58 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
   printf("postttvjitter\n");
   printf("xisq=%lf\n", xisq);
   
-  double photoradius = int_in[3][0][0]; 
-  if (SPECTROSCOPY) {
-    if (photoradius > SPECRADIUS) xisq += pow( (photoradius - SPECRADIUS) / SPECERRPOS, 2 );
-    else xisq += pow( (photoradius - SPECRADIUS) / SPECERRNEG, 2 );
-  }
-  double photomass = int_in[2][0][0]; 
-  if (MASSSPECTROSCOPY) {
-    if (photomass > SPECMASS) xisq += pow( (photomass - SPECMASS) / MASSSPECERRPOS, 2 );
-    else xisq += pow( (photomass - SPECMASS) / MASSSPECERRNEG, 2 );
-  }
-  printf("xisqnoinc=%lf\n", xisq);
-  if (INCPRIOR) {
-    int i0;
-    for (i0=0; i0<npl; i0++) {
-      printf("%lf\n", xisq);
-      xisq += -2.0*log( sin(p[i0*pperplan+4] *M_PI/180.) ); 
-    }
-  }
-  printf("xisqnoe=%lf\n", xisq);
-  double* evector = malloc(npl*sofd);
-  if (ECUTON || EPRIOR) {
-    if (SQRTE) {
-      int i0;
-      for (i0=0; i0<npl; i0++) {
-        evector[i0] = pow(sqrt( pow(p[i0*pperplan+2], 2) + pow(p[i0*pperplan+3], 2) ), 2);
-      }
-    } else {
-      int i0;
-      for (i0=0; i0<npl; i0++) {
-        evector[i0] = sqrt( pow(p[i0*pperplan+2], 2) + pow(p[i0*pperplan+3], 2) );
-      }
-    }
-  }
-  if (EPRIOR) {
-    int i0;
-    for (i0=0; i0<NPL; i0++) {
-      if (EPRIORV[i0]) {
-        double priorprob;
-        if (EPRIOR==1) {
-          priorprob = rayleighpdf(evector[i0]);
-        } else if (EPRIOR==2) {
-          priorprob = normalpdf(evector[i0]);
-        }
-        xisq += -2.0*log( priorprob );
-      }
-    }
-  }
+//  double photoradius = int_in[3][0][0]; 
+//  if (SPECTROSCOPY) {
+//    if (photoradius > SPECRADIUS) xisq += pow( (photoradius - SPECRADIUS) / SPECERRPOS, 2 );
+//    else xisq += pow( (photoradius - SPECRADIUS) / SPECERRNEG, 2 );
+//  }
+//  double photomass = int_in[2][0][0]; 
+//  if (MASSSPECTROSCOPY) {
+//    if (photomass > SPECMASS) xisq += pow( (photomass - SPECMASS) / MASSSPECERRPOS, 2 );
+//    else xisq += pow( (photomass - SPECMASS) / MASSSPECERRNEG, 2 );
+//  }
+//  printf("xisqnoinc=%lf\n", xisq);
+//  if (INCPRIOR) {
+//    int i0;
+//    for (i0=0; i0<npl; i0++) {
+//      printf("%lf\n", xisq);
+//      xisq += -2.0*log( sin(p[i0*pperplan+4] *M_PI/180.) ); 
+//    }
+//  }
+//  printf("xisqnoe=%lf\n", xisq);
+//  double* evector = malloc(npl*sofd);
+//  if (ECUTON || EPRIOR) {
+//    if (SQRTE) {
+//      int i0;
+//      for (i0=0; i0<npl; i0++) {
+//        evector[i0] = pow(sqrt( pow(p[i0*pperplan+2], 2) + pow(p[i0*pperplan+3], 2) ), 2);
+//      }
+//    } else {
+//      int i0;
+//      for (i0=0; i0<npl; i0++) {
+//        evector[i0] = sqrt( pow(p[i0*pperplan+2], 2) + pow(p[i0*pperplan+3], 2) );
+//      }
+//    }
+//  }
+//  if (EPRIOR) {
+//    int i0;
+//    for (i0=0; i0<NPL; i0++) {
+//      if (EPRIORV[i0]) {
+//        double priorprob;
+//        if (EPRIOR==1) {
+//          priorprob = rayleighpdf(evector[i0]);
+//        } else if (EPRIOR==2) {
+//          priorprob = normalpdf(evector[i0]);
+//        }
+//        xisq += -2.0*log( priorprob );
+//      }
+//    }
+//  }
+
+  xisq += compute_priors(p, 0);
+
   printf("xisq=%lf\n", xisq);
   free(dev);
-  free(evector);
 
   if (CONVERT) {  
     int i, j;
@@ -6684,60 +6843,13 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
       }
     }
 
-
-    double photoradius;
-    photoradius = p0local[i*pperwalker+npl*pperplan+1]; 
-    double photomass;
-    photomass = p0local[i*pperwalker+npl*pperplan+0]; 
-    double* evector; 
-    evector = malloc(npl*sofd);
-    if (ECUTON || EPRIOR) {
-      if (SQRTE) {
-        int i0;
-        for (i0=0; i0<npl; i0++) {
-          evector[i0] = pow(sqrt( pow(p0local[i*pperwalker+i0*pperplan+2], 2) + pow(p0local[i*pperwalker+i0*pperplan+3], 2) ), 2);
-        }
-      } else {
-        int i0;
-        for (i0=0; i0<npl; i0++) {
-          evector[i0] = sqrt( pow(p0local[i*pperwalker+i0*pperplan+2], 2) + pow(p0local[i*pperwalker+i0*pperplan+3], 2) );
-        }
-      }
-    }
-    if (SPECTROSCOPY) {
-      if (photoradius > SPECRADIUS) xisqtemp += pow( (photoradius - SPECRADIUS) / SPECERRPOS, 2 );
-      else xisqtemp += pow( (photoradius - SPECRADIUS) / SPECERRNEG, 2 );
-    }
-    if (MASSSPECTROSCOPY) {
-      if (photomass > SPECMASS) xisqtemp += pow( (photomass - SPECMASS) / MASSSPECERRPOS, 2 );
-      else xisqtemp += pow( (photomass - SPECMASS) / MASSSPECERRNEG, 2 );
-    }
-    if (INCPRIOR) {
-      int i0;
-      for (i0=0; i0<npl; i0++) {
-        xisqtemp += -2.0*log( sin(p0local[i*pperwalker+i0*pperplan+4] *M_PI/180.) ); 
-      }
-    }
-    if (EPRIOR) {
-      int i0;
-      for (i0=0; i0<NPL; i0++) {
-        if (EPRIORV[i0]) {
-          double priorprob;
-          if (EPRIOR==1) {
-            priorprob = rayleighpdf(evector[i0]);
-          } else if (EPRIOR==2) {
-            priorprob = normalpdf(evector[i0]);
-          }
-          xisqtemp += -2.0*log( priorprob );
-        }
-      }
-    }
+    xisqtemp += compute_priors(p0local, i) 
 
     celeritefail:
 
     xisq0[i] = xisqtemp;
  
-    free(evector);
+    //free(evector);
 
     free(int_in[0][0]);
     free(int_in[0]);
@@ -6836,149 +6948,39 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
       int notallowed=0;
   
       int ip;
-      if (bimodf) {
-        if ( jj % bimodf == 0) {
-          for (ip=0; ip<pstar; ip++) {
-            p0local[nw*pperwalker+npl*pperplan+ip] += (gamma+(1-gamma)*bimodlist[npl*pperplan+ip])*(p0local[nw1*pperwalker+npl*pperplan+ip]-p0local[nw2*pperwalker+npl*pperplan+ip])*(1-parfix[npl*pperplan+ip])*(1+(1+(gamma-1)*bimodlist[npl*pperplan+ip])*gsl_ran_gaussian(rnw, 0.1));
-          }
-          if ( DIGT0 && (p0local[nw*pperwalker+npl*pperplan+4] < 0.0) ) notallowed=1;
-          for (ip=0; ip<npl; ip++) {
-            int ii;
-            for (ii=0; ii<pperplan; ii++) {
-              p0local[nw*pperwalker+ip*pperplan+ii] += (gamma+(1-gamma)*bimodlist[ip*pperplan+ii])*(p0local[nw1*pperwalker+ip*pperplan+ii]-p0local[nw2*pperwalker+ip*pperplan+ii])*(1-parfix[ip*pperplan+ii])*(1+(1+(gamma-1)*bimodlist[ip*pperplan+ii])*gsl_ran_gaussian(rnw, 0.1));
-            }
-            // make sure i and Omega angles are not cycling through:
-            if ( p0local[nw*pperwalker+ip*pperplan+4] < 0.0 || p0local[nw*pperwalker+ip*pperplan+4] > 180.0 ) notallowed=1;
-            if ( p0local[nw*pperwalker+ip*pperplan+5] < -180.0 || p0local[nw*pperwalker+ip*pperplan+5] > 180.0 ) notallowed=1;
-            // make sure i>=90
-            if ( IGT90 && (p0local[nw*pperwalker+ip*pperplan+4] < 90.0) ) notallowed=1;
-            // make sure m>=0
-            if ( MGT0 && (p0local[nw*pperwalker+ip*pperplan+6] < 0.0) ) notallowed=1;
-            //make sure density is allowed
-            if (DENSITYCUTON) {
-              double massg = p0local[nw*pperwalker+ip*pperplan+6] / MSOMJ * MSUNGRAMS; 
-              double radcm = p0local[nw*pperwalker+npl*pperplan+1] * p0local[nw*pperwalker+ip*pperplan+7] * RSUNCM;
-              double rhogcc = massg / (4./3.*M_PI*radcm*radcm*radcm);
-              if (rhogcc > MAXDENSITY[ip]) notallowed=1;
-            }
-          } 
-        } else {
-          for (ip=0; ip<pstar; ip++) {
-            p0local[nw*pperwalker+npl*pperplan+ip] += (gamma+(1-gamma)*bimodlist[npl*pperplan+ip])*(p0local[nw1*pperwalker+npl*pperplan+ip]-p0local[nw2*pperwalker+npl*pperplan+ip])*(1-parfix[npl*pperplan+ip])*(1+(1+(gamma-1)*bimodlist[npl*pperplan+ip])*gsl_ran_gaussian(rnw, 0.1));
-          }
-          if ( DIGT0 && (p0local[nw*pperwalker+npl*pperplan+4] < 0.0) ) notallowed=1;
-          for (ip=0; ip<npl; ip++) {
-            int ii;
-            for (ii=0; ii<pperplan; ii++) {
-              p0local[nw*pperwalker+ip*pperplan+ii] += gamma*(p0local[nw1*pperwalker+ip*pperplan+ii]-p0local[nw2*pperwalker+ip*pperplan+ii])*(1-parfix[ip*pperplan+ii])*(1+gsl_ran_gaussian(rnw, 0.1));
-            }
-            // make sure i and Omega angles are not cycling through:
-            if ( p0local[nw*pperwalker+ip*pperplan+4] < 0.0 || p0local[nw*pperwalker+ip*pperplan+4] > 180.0 ) notallowed=1;
-            if ( p0local[nw*pperwalker+ip*pperplan+5] < -180.0 || p0local[nw*pperwalker+ip*pperplan+5] > 180.0 ) notallowed=1;
-            // make sure i>=90
-            if ( IGT90 && (p0local[nw*pperwalker+ip*pperplan+4] < 90.0) ) notallowed=1;
-            // make sure m>=0
-            if ( MGT0 && (p0local[nw*pperwalker+ip*pperplan+6] < 0.0) ) notallowed=1;
-            //make sure density is allowed
-            if (DENSITYCUTON) {
-              double massg = p0local[nw*pperwalker+ip*pperplan+6] / MSOMJ * MSUNGRAMS; 
-              double radcm = p0local[nw*pperwalker+npl*pperplan+1] * p0local[nw*pperwalker+ip*pperplan+7] * RSUNCM;
-              double rhogcc = massg / (4./3.*M_PI*radcm*radcm*radcm);
-              if (rhogcc > MAXDENSITY[ip]) notallowed=1;
-            }
-          } 
+      if (bimodf && jj % bimodf == 0) {
+        for (ip=0; ip<pstar; ip++) {
+          p0local[nw*pperwalker+npl*pperplan+ip] += (gamma+(1-gamma)*bimodlist[npl*pperplan+ip])*(p0local[nw1*pperwalker+npl*pperplan+ip]-p0local[nw2*pperwalker+npl*pperplan+ip])*(1-parfix[npl*pperplan+ip])*(1+(1+(gamma-1)*bimodlist[npl*pperplan+ip])*gsl_ran_gaussian(rnw, 0.1));
         }
+        for (ip=0; ip<npl; ip++) {
+          int ii;
+          for (ii=0; ii<pperplan; ii++) {
+            p0local[nw*pperwalker+ip*pperplan+ii] += (gamma+(1-gamma)*bimodlist[ip*pperplan+ii])*(p0local[nw1*pperwalker+ip*pperplan+ii]-p0local[nw2*pperwalker+ip*pperplan+ii])*(1-parfix[ip*pperplan+ii])*(1+(1+(gamma-1)*bimodlist[ip*pperplan+ii])*gsl_ran_gaussian(rnw, 0.1));
+          }
+        } 
       } else {
         for (ip=0; ip<pstar; ip++) {
           p0local[nw*pperwalker+npl*pperplan+ip] += gamma*(p0local[nw1*pperwalker+npl*pperplan+ip]-p0local[nw2*pperwalker+npl*pperplan+ip])*(1-parfix[npl*pperplan+ip])*(1+gsl_ran_gaussian(rnw, 0.1));
         }
-        if ( DIGT0 && (p0local[nw*pperwalker+npl*pperplan+4] < 0.0) ) notallowed=1;
         for (ip=0; ip<npl; ip++) {
           int ii;
           for (ii=0; ii<pperplan; ii++) {
             p0local[nw*pperwalker+ip*pperplan+ii] += gamma*(p0local[nw1*pperwalker+ip*pperplan+ii]-p0local[nw2*pperwalker+ip*pperplan+ii])*(1-parfix[ip*pperplan+ii])*(1+gsl_ran_gaussian(rnw, 0.1));
           }
-          // make sure i and Omega angles are not cycling through:
-          if ( p0local[nw*pperwalker+ip*pperplan+4] < 0.0 || p0local[nw*pperwalker+ip*pperplan+4] > 180.0 ) notallowed=1;
-          if ( p0local[nw*pperwalker+ip*pperplan+5] < -180.0 || p0local[nw*pperwalker+ip*pperplan+5] > 180.0 ) notallowed=1;
-          // make sure i>=90
-          if ( IGT90 && (p0local[nw*pperwalker+ip*pperplan+4] < 90.0) ) notallowed=1;
-          // make sure m>=0
-          if ( MGT0 && (p0local[nw*pperwalker+ip*pperplan+6] < 0.0) ) notallowed=1;
-          //make sure density is allowed
-          if (DENSITYCUTON) {
-            double massg = p0local[nw*pperwalker+ip*pperplan+6] / MSOMJ * MSUNGRAMS; 
-            double radcm = p0local[nw*pperwalker+npl*pperplan+1] * p0local[nw*pperwalker+ip*pperplan+7] * RSUNCM;
-            double rhogcc = massg / (4./3.*M_PI*radcm*radcm*radcm);
-            if (rhogcc > MAXDENSITY[ip]) notallowed=1;
-          }
         } 
       }
-      double photoradius = p0local[nw*pperwalker+npl*pperplan+1]; 
-      double photomass = p0local[nw*pperwalker+npl*pperplan+0]; 
-      
-      // check that RVJITTER >= 0
-      if (RVS) {
-        if (RVJITTERFLAG) {
-          int ki;
-          for (ki=0; ki<RVJITTERTOT; ki++) {
-            if (p0local[nw*pperwalker+npl*pperplan+(5+ki)] < 0.0) {
-              notallowed=1;
-            }
-          }
-        }
-      }
-      
-      // check that celerite terms >= 0
-      if (CELERITE) {
-          int ki;
-          for (ki=0; ki<NCELERITE; ki++) {
-            if (p0local[nw*pperwalker+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+ki] < 0.0) {
-              notallowed=1;
-            }
-          }
-      }
-      if (RVCELERITE) {
-          int ki;
-          for (ki=0; ki<NRVCELERITE; ki++) {
-            if (p0local[nw*pperwalker+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+CELERITE*4+ki] < 0.0) {
-              notallowed=1;
-            }
-          }
-      }
-  
-      double* evector = malloc(npl*sofd);
-      if (ECUTON || EPRIOR) {
-        if (SQRTE) {
-          int i0;
-          for (i0=0; i0<npl; i0++) {
-            evector[i0] = pow(sqrt( pow(p0local[nw*pperwalker+i0*pperplan+2], 2) + pow(p0local[nw*pperwalker+i0*pperplan+3], 2) ), 2);
-          }
-        } else {
-          int i0;
-          for (i0=0; i0<npl; i0++) {
-            evector[i0] = sqrt( pow(p0local[nw*pperwalker+i0*pperplan+2], 2) + pow(p0local[nw*pperwalker+i0*pperplan+3], 2) );
-          }
-        }
-      }
-      // make sure e_d cos  w_d is within its range
-      if (ECUTON) {
-        double* emax = EMAX;
-        int i0;
-        for (i0=0; i0<npl; i0++) {
-          if (evector[i0] > emax[i0] ) notallowed=1;
-        }
-      }
-      //make sure ld constants in range
-      if ( DILUTERANGE && (p0local[nw*pperwalker+npl*pperplan+2] < 0.0 || p0local[nw*pperwalker+npl*pperplan+2] > 1.0 || p0local[nw*pperwalker+npl*pperplan+3] < 0.0 || p0local[nw*pperwalker+npl*pperplan+3] > 1.0) ) notallowed=1;
-
-      double ***nint_in = dsetup2(&p0local[nw*pperwalker], npl);
-  
+     
+      // Check for chains that have strayed past any hard boundaries. 
+      // No need to integrate any of these.  
+      notallowed += check_boundaries(p0local, nw); 
+ 
       if (notallowed) { 
           
         acceptance[nw] = 0;
   
       } else {
+      
+        double ***nint_in = dsetup2(&p0local[nw*pperwalker], npl);
   
         double ***nflux_rvs; 
         if (MULTISTAR) nflux_rvs = dpintegrator_multi(nint_in, tfe, tve, cadencelist);
@@ -6994,7 +6996,7 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
           for (il=0; il<maxil; il++) nxisqtemp += ndev[il+1]*ndev[il+1];
         } else { // if celerite
           double *xs = nflux_rvs[0][0];
-              long maxil = (long) xs[0];
+          long maxil = (long) xs[0];
           double *trueys = nflux_rvs[0][1];
           double *modelys = nflux_rvs[0][2];
           double *es = nflux_rvs[0][3];
@@ -7219,38 +7221,11 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
           }
   
         }
-        
-        //double photoradius = p0local[nw*pperwalker+npl*pperplan+1]; 
-        if (SPECTROSCOPY) {
-          if (photoradius > SPECRADIUS) nxisqtemp += pow( (photoradius - SPECRADIUS) / SPECERRPOS, 2 );
-          else nxisqtemp += pow( (photoradius - SPECRADIUS) / SPECERRNEG, 2 );
-        }
-        if (MASSSPECTROSCOPY) {
-          if (photomass > SPECMASS) nxisqtemp += pow( (photomass - SPECMASS) / MASSSPECERRPOS, 2 );
-          else nxisqtemp += pow( (photomass - SPECMASS) / MASSSPECERRNEG, 2 );
-        }
-        if (INCPRIOR) {
-                int i0;
-          for (i0=0; i0<npl; i0++) {
-            nxisqtemp += -2.0*log( sin(p0local[nw*pperwalker+i0*pperplan+4] * M_PI/180.)       ); 
-          }
-        }
-        if (EPRIOR) {
-          int i0;
-          for (i0=0; i0<NPL; i0++) {
-            if (EPRIORV[i0]) {
-              double priorprob;
-              if (EPRIOR==1) {
-                priorprob = rayleighpdf(evector[i0]);
-              } else if (EPRIOR==2) {
-                priorprob = normalpdf(evector[i0]);
-              }
-              nxisqtemp += -2.0*log( priorprob );
-            }
-          }
-        }
+       
+
+        nxisqtemp += compute_priors(p0local, nw);
+ 
         double xisq = nxisqtemp;
-        
 
         free(nint_in[0][0]);
         free(nint_in[0]);
@@ -7291,7 +7266,7 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
         } 
   
       }
-      free(evector);
+      //free(evector);
   
       // switch back to old ones if not accepted
       if (acceptance[nw] == 0) {
