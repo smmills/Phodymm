@@ -3154,6 +3154,7 @@ double *binnedlc ( double *times, int *cadences, long ntimes, double binwidth, i
     double *fluxlist = malloc(ntimes*sofd);
     double rsinau = RSUNAU; //0.0046491; // solar radius in au
     long maxcalls = ntimes*nperbin;// + 1;
+    double rstarau = rsinau*rstar; 
     double *fulltimelist=malloc(maxcalls*sofd);
     long j = 0;
     long jj = 0;
@@ -3183,8 +3184,8 @@ double *binnedlc ( double *times, int *cadences, long ntimes, double binwidth, i
     double ystart[nplanets];
     int i;
     for (i=0; i<nplanets; i++) {
-       xstart[i] = (transitarr[i][1] - transitarr[i][3]*(transitarr[i][0]-fulltimelist[0]))/(rsinau*rstar);
-       ystart[i] = (transitarr[i][2] - transitarr[i][4]*(transitarr[i][0]-fulltimelist[0]))/(rsinau*rstar);
+       xstart[i] = (transitarr[i][1] - transitarr[i][3]*(transitarr[i][0]-fulltimelist[0]))/rstarau;
+       ystart[i] = (transitarr[i][2] - transitarr[i][4]*(transitarr[i][0]-fulltimelist[0]))/rstarau;
     }
 
     circle sun = {0.,0., 1.};
@@ -3211,39 +3212,45 @@ double *binnedlc ( double *times, int *cadences, long ntimes, double binwidth, i
         double binnedflux=0;
         if (cadences[n] == 1) {
           for (nn=0; nn<nperbin; nn++) {
-            double t_cur = fulltimelist[(n-nlong) + nlong*nperbin + nn];
-            double t_next = fulltimelist[(n-nlong) + nlong*nperbin + nn + 1];
             binnedflux += mttr_flux_general(system, nplanets+1, g0, g1, g2);// /nflux; 
-            for (i=0; i<nplanets; i++) {
-              system[i+1].x0 += transitarr[i][3]*(t_next-t_cur)/(rstar*rsinau);
-              system[i+1].y0 += transitarr[i][4]*(t_next-t_cur)/(rstar*rsinau);
+            if (nn < (nperbin-1)) {
+              double t_cur = fulltimelist[(n-nlong) + nlong*nperbin + nn];
+              double t_next = fulltimelist[(n-nlong) + nlong*nperbin + nn + 1];
+              for (i=0; i<nplanets; i++) {
+                system[i+1].x0 += transitarr[i][3]*(t_next-t_cur)/rstarau;
+                system[i+1].y0 += transitarr[i][4]*(t_next-t_cur)/rstarau;
+              }
             }
           }
           binnedflux = binnedflux/nperbin;
           nlong++;
         } else {
-          double t_cur = fulltimelist[(n-nlong) + nlong*nperbin];
-          double t_next = fulltimelist[(n-nlong) + nlong*nperbin + 1];
           binnedflux += mttr_flux_general(system, nplanets+1, g0, g1, g2);// /nflux; 
-          for (i=0; i<nplanets; i++) {
-            system[i+1].x0 += transitarr[i][3]*(t_next-t_cur)/(rstar*rsinau);
-            system[i+1].y0 += transitarr[i][4]*(t_next-t_cur)/(rstar*rsinau);
+          if (nn < (nperbin-1)) {
+            double t_cur = fulltimelist[(n-nlong) + nlong*nperbin];
+            double t_next = fulltimelist[(n-nlong) + nlong*nperbin + 1];
+            for (i=0; i<nplanets; i++) {
+              system[i+1].x0 += transitarr[i][3]*(t_next-t_cur)/rstarau;
+              system[i+1].y0 += transitarr[i][4]*(t_next-t_cur)/rstarau;
+            }
           }
         }
         fluxlist[n] = binnedflux;
       }
     } else {
-    for (n=0; n<ntimes; n++) {
+      for (n=0; n<ntimes; n++) {
         int nn;
         double binnedflux=0;
         for (nn=0; nn<nperbin; nn++) {
+          binnedflux += mttr_flux_general(system, nplanets+1, g0, g1, g2);// /nflux; 
+          if (nn < (nperbin-1)) {
             double t_cur = fulltimelist[n*nperbin+nn];
             double t_next = fulltimelist[n*nperbin+nn+1];
-            binnedflux += mttr_flux_general(system, nplanets+1, g0, g1, g2);// /nflux; 
             for (i=0; i<nplanets; i++) {
-                system[i+1].x0 += transitarr[i][3]*(t_next-t_cur)/(rstar*rsinau);
-                system[i+1].y0 += transitarr[i][4]*(t_next-t_cur)/(rstar*rsinau);
+              system[i+1].x0 += transitarr[i][3]*(t_next-t_cur)/rstarau;
+              system[i+1].y0 += transitarr[i][4]*(t_next-t_cur)/rstarau;
             }
+          }
         }
         binnedflux = binnedflux/nperbin;
         fluxlist[n] = binnedflux;
@@ -4482,7 +4489,7 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
     MPI_Comm_size(MPI_COMM_WORLD, &ncores);
     int npercore = nwalkers / ncores;
     //nwcore = (unsigned long) RANK;
-    printf("ncores %i nwalkers %i\n", ncores, nwalkers);
+    //printf("ncores %i nwalkers %i\n", ncores, nwalkers);
     
     unsigned long nw;
     long nwinit=nwcore*npercore;
