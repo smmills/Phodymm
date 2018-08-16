@@ -52,17 +52,24 @@ The units used internally are AU and days. Generally all quantities should be gi
 ### Input Files
 
 1. DATA FILE  
-***The file with the list of input times (e.g., example_planets/Kepler-36/kplr011401755_1440_1.txt) must have the following format:
-```[Line Index] \t [Time (days)] \t [Ignored] \t [Ignored] \t [Flux] \t [Flux Error]```
-***In units:
-```[none] \t [days] \t [none] \t [none] \t [Normalized to 1] \t [Relative to Flux Value]```
-***With type:
-```[long int] \t [double] \t [numeric] \t [numeric] \t [double] \t [double]```
-***The 1st, 3rd, and 4th columns are currently ignored, but must be present. They represent the data point index from Kepler and the raw/un-normalized flux and uncertainty values. If short and long cadence data are used simultanously, the data file must also contain an additional column indicating the cadence of each point. The column should be of type int and is simply a 1 if the point is long cadence, and 0 if it is short cadence.  
 
-***If only a forward model is being computed, then only the Time column (and cadence if present) are used.  
-
-***To conveniently generate data files from the Kepler data, see https://github.com/smmills/kepler_detrend
+   The file with the list of input times (e.g., example_planets/Kepler-36/kplr011401755_1440_1.txt) must have the following format:
+   ```
+   [Line Index] \t [Time (days)] \t [Ignored] \t [Ignored] \t [Flux] \t [Flux Error]
+   ```
+   In units:
+   ```
+   [none] \t [days] \t [none] \t [none] \t [Normalized to 1] \t [Relative to Flux Value]
+   ```
+   With type:
+   ```
+   [long int] \t [double] \t [numeric] \t [numeric] \t [double] \t [double]
+   ```
+   The 1st, 3rd, and 4th columns are currently ignored, but must be present. They represent the data point index from Kepler and the raw/un-normalized flux and uncertainty values. If short and long cadence data are used simultanously, the data file must also contain an additional column indicating the cadence of each point. The column should be of type int and is simply a 1 if the point is long cadence, and 0 if it is short cadence.  
+   
+   If only a forward model is being computed, then only the Time column (and cadence if present) are used.  
+   
+   To conveniently generate data files from the Kepler data, see https://github.com/smmills/kepler_detrend
 
 
 2. INPUT FILE
