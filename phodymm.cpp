@@ -1,22 +1,22 @@
-#define demcmc_compile 1
+#define demcmc_compile 0
 
 // To compile lcout:
 // make sure demcmc_compile is defined as 0
 // Compile with:
-// g++ -w -O3 -o lcout -I/home/smills/celerite/celerite/cpp/include -I/home/smills/celerite/celerite/cpp/lib/eigen_3.3.3 -lm -lgsl -lgslcblas -fpermissive demcmc.cpp 
+// g++ -w -O3 -o lcout -I/home/smills/celerite/celerite/cpp/include -I/home/smills/celerite/celerite/cpp/lib/eigen_3.3.3 -lm -lgsl -lgslcblas -fpermissive phodymm.cpp 
 // ./lcout demcmc.in kep35.pldin [[-rv0=rvs0.file] [-rv1=rvs1.file] ... ]
 
 // To compile demcmc:
 // make sure demcmc_compile is defined as 1
-// mpic++ -w -Ofast -o demcmc -I/home/smills/celerite/celerite/cpp/include -I/home/smills/celerite/celerite/cpp/lib/eigen_3.3.3 -lm -lgsl -lgslcblas -lmpi -fpermissive demcmc.cpp
+// mpic++ -w -Ofast -o demcmc -I/home/smills/celerite/celerite/cpp/include -I/home/smills/celerite/celerite/cpp/lib/eigen_3.3.3 -lm -lgsl -lgslcblas -lmpi -fpermissive phodymm.cpp
 // Run with:
 // mpirun ./demcmc demcmc.in kep.pldin
 
 // To compile longterm stability
 // make sure demcmc_compile is defined as 3
 // Compile with:
-// $ gcc -Ofast -o stability -lgsl -lgslcblas -fopenmp demcmc.c
-// g++ -w -O3 -o lcout -I/home/smills/celerite/celerite/cpp/include -I/home/smills/celerite/celerite/cpp/lib/eigen_3.3.3 -lm -lgsl -lgslcblas -fpermissive demcmc.cpp
+// $ gcc -Ofast -o stability -lgsl -lgslcblas -fopenmp phodymm.c
+// g++ -w -O3 -o lcout -I/home/smills/celerite/celerite/cpp/include -I/home/smills/celerite/celerite/cpp/lib/eigen_3.3.3 -lm -lgsl -lgslcblas -fpermissive phodymm.cpp
 
 #if (demcmc_compile==1) 
 #include <mpi.h>
