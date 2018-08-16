@@ -37,7 +37,7 @@ mpic++ -w -Ofast -o demcmc -I/yourpathto/celerite/celerite/cpp/include -I/yourpa
 ```
 
 This will create an executable called `demcmc` which can be used to run a differential evolution MCMC (DEMCMC). 
-It is recommended you use this command on a computing cluster. Some example scripts to run the DEMCMC are included in 
+It is recommended you run the demcmc executable on a computing cluster. Some example scripts to run the DEMCMC are included in 
 `example_planets/Kepler-36`
 For more details look at the readme.txt in that folder.  
 
@@ -51,21 +51,18 @@ The units used internally are AU and days. Generally all quantities should be gi
 
 ### Input Files
 
-1. DATA FILE
-The file with the list of input times (e.g., example_planets/Kepler-36/kplr011401755_1440_1.txt) must have the following format:
-[Line Index] \t [Time (days)] \t [Ignored] \t [Ignored] \t [Flux] \t [Flux Error]
-In units:
-[none] \t [days] \t [none] \t [none] \t [Normalized to 1] \t [Relative to Flux Value]
-With type:
-[long int] \t [double] \t [numeric] \t [numeric] \t [double] \t [double]
-The 1st, 3rd, and 4th columns are currently ignored, but must be present. They represent the data point index from Kepler
-  and the raw/un-normalized flux and uncertainty values.
-If short and long cadence data are used simultanously, the data file must also contain an additional column indicating the cadence of each point.
-The column should be of type int and is simply a 1 if the point is long cadence, and 0 if it is short cadence.  
+1. DATA FILE  
+***The file with the list of input times (e.g., example_planets/Kepler-36/kplr011401755_1440_1.txt) must have the following format:
+```[Line Index] \t [Time (days)] \t [Ignored] \t [Ignored] \t [Flux] \t [Flux Error]```
+***In units:
+```[none] \t [days] \t [none] \t [none] \t [Normalized to 1] \t [Relative to Flux Value]```
+***With type:
+```[long int] \t [double] \t [numeric] \t [numeric] \t [double] \t [double]```
+***The 1st, 3rd, and 4th columns are currently ignored, but must be present. They represent the data point index from Kepler and the raw/un-normalized flux and uncertainty values. If short and long cadence data are used simultanously, the data file must also contain an additional column indicating the cadence of each point. The column should be of type int and is simply a 1 if the point is long cadence, and 0 if it is short cadence.  
 
-If only a forward model is being computed, then only the Time column (and cadence if present) are used. 
+***If only a forward model is being computed, then only the Time column (and cadence if present) are used.  
 
-To conveniently generate data files from the Kepler data, see https://github.com/smmills/kepler_detrend
+***To conveniently generate data files from the Kepler data, see https://github.com/smmills/kepler_detrend
 
 
 2. INPUT FILE
@@ -83,26 +80,26 @@ All entries should be sufficiently described in the input file itself.
 The starting state of the planetary system at the epoch specified in the input file must be provided by the user and is called the initial condition file (e.g., example_planets/Kepler-36/k36.pldin).
 
 The format of this file is first a line which is ignored describing the column names. The first column is the planet name, the last the planetary radius in units of stellar radius, and the second to last the planetary mass in Jupiter masses. The other columns depend on the choice of input parameter basis selected in the input file (by the xyzflag variable).  
-'''
+```
 [Planet Label] \t  [column name] \t [column name] \t [column name] \t [column name] \t [column name] \t [column name] \t [Mass] \t [Rp/Rstar] 
 [value] \t  [value] \t [value] \t [value] \t [value] \t [value] \t [value] \t [value] \t [value] 
 [[value] \t  [value] \t [value] \t [value] \t [value] \t [value] \t [value] \t [value] \t [value]] 
 ...
 [[value] \t  [value] \t [value] \t [value] \t [value] \t [value] \t [value] \t [value] \t [value]]
-'''
+```
 This is followed by at least 5 rows of single value entries related to the overal system or stellar properties. The following must be included:
-'''
+```
 [Stellar Mass (Solar)]
 [Stellar Radius (solar)]
 [c_1 quadratic limb darkening term]
 [c_2 quadratic limb darkening term]
 [dilution: the fraction of the flux in the system not from the star which the planets are transiting]
-'''
+```
 Several optional rows follow, depending on what fitting is being done. For instance, celerite GP fits require the 4 celerite terms (one per row). RV fits can include an RV jitter term for each set of observations (1 per line), etc. For more details refer to the example_planets and input file. Extra lines at the end of this file are ignored. 
 
 
 Typically, the xyzflag in the input file is set to 0, and the basis for the initial condition is specified as:
-'''[Planet Label] \t  [period (d)] \t [T0 (d)] \t [e] \t [i (deg)] \t [Omega (deg)] \t [omega(deg)] \t [Mass] \t [Rp/Rstar]'''
+```[Planet Label] \t  [period (d)] \t [T0 (d)] \t [e] \t [i (deg)] \t [Omega (deg)] \t [omega(deg)] \t [Mass] \t [Rp/Rstar]```
 Where T0 is the time of conjunction of the planet and the star, i is the incliation, Omega is the nodal angle, and omega is the argument of periastron with the coordinate system such that the sky plane is 0. This initial condition is transformed into the basis selected in the input file before fitting (e.g. {e, omega} -> {sqrt(e)*sin(omega), sqrt(e)*cos(omega)).  
 
 Planets should be entered in increasing order of orbital period.  
@@ -130,7 +127,7 @@ Planets should be entered in increasing order of orbital period.
  
  
 
-
+### MCMC Fit (`demcmc`) Output Files
 
 
   
