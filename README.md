@@ -117,6 +117,23 @@ This file is read in by the C code and must be in the exact format as the exampl
    Planets should be entered in increasing order of orbital period.  
 
 
+4. [Optional] Radial Velocity Dataset
+
+   Radial velocity data sets can be passed to either the `lcout` or `demcmc` executables for forward model fitting or RV fitting. Files need to have the format:
+   ```
+   [time (days)] \t [RV (m/s) \t [Error (m/s)] \t [telescope number]
+   ```
+   The time series must have the same 0 point as the flux time. The telescope number is an integer index starting from 0 indentify each unique telescope used for observations. This information is used to determine different constant RV offsets for different telescopes, and allows for different RV jitters for different telescopes. 
+
+   See `example_planets/?` for example RV data usage. 
+
+
+5. [Optional, `demcmc` only] Restart Files
+
+   If a demcmc run is stopped it may be resumed from the last recored generation by passing `demcmc` additional arguments that specify the location of "restart files." These files include the current state of the MCMC chain, current MCMC scaling factor, and the best-fit solution found so far. These files can be generated from the ends of the MCMC output files #1-3 as described below. An example script to automatically generate them correctly is included in `example_planets/Kepler-36/restart.sh` 
+   
+
+
 ### Forward Model (`lcout`) Output Files
 
 1. Lightcurve file (lc_NAME.lcout), where NAME is the name specified in the input file.  
