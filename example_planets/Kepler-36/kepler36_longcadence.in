@@ -127,7 +127,7 @@ int xyzflag= 0
 int xyzlist= 0 0 
 // Initial guess at step size for planet parameters
 // Format: double pstep= P_step T0_step ecosomega_step esinomega_step inclination_step Omega_step mass_step rpors_step [brightness_step c1_step c2_step]
-double pstep= 1e-7      1e-7   1e-5    1e-5    1e-5    1e-5    1e-3    1e-5
+double pstep= 1e-7      1e-7   1e-6    1e-6    1e-5    1e-5    1e-5    1e-5
 // Initial guess at step size for stellar and noise parameters
 // Format: double sstep= Mstar_step Rstar_step c1_step c2_step dilute_step [jitter_step(s)] [celerite_steps]
 double sstep= 1e-7      1e-6    1e-6    1e-6    1e-8  
