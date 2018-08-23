@@ -294,6 +294,8 @@ int check_boundaries( double *p0local, long nw) {
   const int pperplan = PPERPLAN;
   const int sofd = SOFD;
   int ip;
+
+
  
   for (ip=0; ip<npl; ip++) { 
     // make sure i and Omega angles are not cycling through:
@@ -310,6 +312,8 @@ int check_boundaries( double *p0local, long nw) {
       double rhogcc = massg / (4./3.*M_PI*radcm*radcm*radcm);
       if (rhogcc > MAXDENSITY[ip]) notallowed=1;
     }
+    // make sure radius ratios are positive
+    if (p0local[nw*pperwalker+ip*pperplan+7] < 0.0) notallowed=1;
   }
 
   if ( DIGT0 && (p0local[nw*pperwalker+npl*pperplan+4] < 0.0) ) notallowed=1;
@@ -4329,10 +4333,10 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
 
   for (i=0; i<nwalkers; i++) {
     double ***int_in = dsetup2(&p0local[pperwalker*i], npl);
-    printf("Converted to XYZ\n");
+    //printf("Converted to XYZ\n");
     double ***flux_rvs; 
     flux_rvs = dpintegrator_single(int_in, tfe, tve, nte, cadencelist);
-    printf("Computed Flux\n");
+    //printf("Computed Flux\n");
     double **ttvts = flux_rvs[2];
     double **flux = flux_rvs[0];
     double **radvs = flux_rvs[1];
