@@ -14,11 +14,11 @@ double epoch= 800.0
 // Number of individual demcmc walkers
 long nwalkers= 20
 // Number of generations the demcmc will run (i.e. the number of steps per walker)
-long nsteps= 500000
+long nsteps= 1000
 // Data cadence type switch. 0 = short cadence data, 1 = long cadence data, 2 = mixed
 int cadenceswitch= 1
 // File path and name for data
-string tfile= /data/user/smills/Phodymm/example_planets/Kepler-36/kplr011401755_1440_1.txt 
+string tfile= ./kplr011401755_1440_1.txt 
 // Does the system have more than one star? 0=no, 1=yes
 // If yes (1), the following arrays should include the values in brackets, if no (0), omit them
 int multistar= 0
