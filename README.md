@@ -187,5 +187,47 @@ This file is read in by the C code and must be in the exact format as the exampl
  
 
 
+### Example Systems
+
+Example data files, setup scripts, etc., are included in example_planets
+
+
+### Analysis Tools
+
+Simple plotting and analysis tools written in Python 2 are available in `example_planets/analysis_tools`. These tools require the `numpy`, `pandas`, `matplotlib`, and `corner` packages.
+
+1. Forward Model Plotting
+
+   After a forward model has been run, these scripts provide quick diagnostic plots of the fits and transits. The scripts should be copied to the directory that the forward model was run in as they assume the output files are in the current directory. They may be run with
+   ```
+   $ python scriptname.py
+   ```
+   *  `lcplot.py` - This script plots a segment of the lightcurve. It overplots the model and the data, and includes the residuals of the fit at the bottom. The modeled location of each planet is indicated at the top of the figure in a unique color. To change the range of the data plotted, the first line of the script may be edited. The script produces a figures titled 'lcplot.png.'
+
+   * `omc.py` - This script computes the mean period of the planets over the data range by performing a linear fit to the model's transit times. The difference between the modeled transit times and this constant linear ephemeris (period) is known as an O-C (Observed minus calculated) TTV diagram. The O-C for each planet is shown in the outputted figures 'omc_AA_BB.png', where AA indicates the body being transited (the star = 00 in most cases) and BB is the planet index (01 for the innermost planet).  
+       
+  * `phasefold.py` - This script plots all transits of each planet that do not overlap with any other transits. The innermost (top panel) to outermost (bottom panel) planets are over-plotted by removing their TTVs as computed in the model. The raw data is shown in gray points and black points show the data phase-binned in 15 minute intervals. 
+
+2. DEMCMC Analysis
+
+   `demcmc_quick_analyze.py` is a python script to perform some standard analysis of the output of a demcmc run. It should be copied to the directory where a demcm_RUNNAME.out file was created, and shoudl be invoked with:
+   ```
+   python demcmc_quick_analyze.py INFILE.in [burnin]
+   ``` 
+   where INFILE.in is the name of the .in input file for the run and burnin is an optional parameter which can be set to an integer N to disregard the first N steps when computing posterior information. Running this script produces a new directory called analysis_dir which is populated with:
+   
+   * Trace plots for each parameter (format=.png)
+   * Corner correlation plots for all parameters (format=.png)
+   * 1- & 3-sigma confidence intervals for each parameter (format=.txt). These use the median and [.16, .84] and [.0015, .9985] percentiles. 
+   * 2-sigma upper limits for each parameter, i.e., the value which 95% of draws lie below (format=.txt). This is useful for understanding the upper bound on paramters like mass, but may be meaningless for other parameters which are more well-defined. 
+   * Corner correlation plots for the masses and eccentricities (transformed out of the fitting basis) for each planet (format=.png)
+   * 1-d posteriors of all planets m mass, radius, and densities marginalized over all other parameters (format=.png)
+   * Gelman-Rubin Rhat statistics for gauging MCMC convergence for each parameter (format=.txt)
 
   
+
+
+
+
+
+
