@@ -33,7 +33,7 @@ to
 
 Then recompile with
 ```
-mpic++ -w -Ofast -o demcmc -I/yourpathto/celerite/celerite/cpp/include -I/yourpathto/celerite/celerite/cpp/lib/eigen_3.3.3 -lm -lgsl -lgslcblas -lmpi -fpermissive phodymm.cpp
+$ mpic++ -w -Ofast -o demcmc -I/yourpathto/celerite/celerite/cpp/include -I/yourpathto/celerite/celerite/cpp/lib/eigen_3.3.3 -lm -lgsl -lgslcblas -lmpi -fpermissive phodymm.cpp
 ```
 
 This will create an executable called `demcmc` which can be used to run a differential evolution MCMC (DEMCMC). 
@@ -187,12 +187,12 @@ This file is read in by the C code and must be in the exact format as the exampl
  
 
 
-### Example Systems
+## Example Systems
 
 Example data files, setup scripts, etc., are included in example_planets
 
 
-### Analysis Tools
+## Analysis Tools
 
 Simple plotting and analysis tools written in Python 2 are available in `example_planets/analysis_tools`. These tools require the `numpy`, `pandas`, `matplotlib`, and `corner` packages.
 
@@ -206,13 +206,13 @@ Simple plotting and analysis tools written in Python 2 are available in `example
 
    * `omc.py` - This script computes the mean period of the planets over the data range by performing a linear fit to the model's transit times. The difference between the modeled transit times and this constant linear ephemeris (period) is known as an O-C (Observed minus calculated) TTV diagram. The O-C for each planet is shown in the outputted figures 'omc_AA_BB.png', where AA indicates the body being transited (the star = 00 in most cases) and BB is the planet index (01 for the innermost planet).  
        
-  * `phasefold.py` - This script plots all transits of each planet that do not overlap with any other transits. The innermost (top panel) to outermost (bottom panel) planets are over-plotted by removing their TTVs as computed in the model. The raw data is shown in gray points and black points show the data phase-binned in 15 minute intervals. 
+   * `phasefold.py` - This script plots all transits of each planet that do not overlap with any other transits. The innermost (top panel) to outermost (bottom panel) planets are over-plotted by removing their TTVs as computed in the model. The raw data is shown in gray points and black points show the data phase-binned in 15 minute intervals. 
 
 2. DEMCMC Analysis
 
    `demcmc_quick_analyze.py` is a python script to perform some standard analysis of the output of a demcmc run. It should be copied to the directory where a demcm_RUNNAME.out file was created, and shoudl be invoked with:
    ```
-   python demcmc_quick_analyze.py INFILE.in [burnin]
+   $ python demcmc_quick_analyze.py INFILE.in [burnin]
    ``` 
    where INFILE.in is the name of the .in input file for the run and burnin is an optional parameter which can be set to an integer N to disregard the first N steps when computing posterior information. Running this script produces a new directory called analysis_dir which is populated with:
    
