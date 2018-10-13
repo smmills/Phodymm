@@ -37,7 +37,11 @@ def plot_omc(tt, omc, b, fname=None):
   f.savefig(fname)
         
 
-for f in glob.glob("./tbv[0-9][0-9]_[0-9][0-9].out"):
+tbvflist = glob.glob("./tbv[0-9][0-9]_[0-9][0-9].out")
+if len(tbvflist) == 0:
+  print("Warning: no tbvXX_YY.out files found in this directory")
+
+for f in tbvflist:
   n, tt = read_in_tbv(f)
   tt, omc, b = compute_omc(n, tt)
   fname = 'omc_'+f[5:10]+'.png'

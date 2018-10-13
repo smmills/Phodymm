@@ -1,4 +1,3 @@
-#
 ### Edit this range to plot a different segment of data
 trange = [100,150]
 #
@@ -10,6 +9,15 @@ import glob
 colorlist = ['b', 'r', 'g', 'y', 'c', 'm', 'midnightblue', 'yellow'] 
 
 lcdatafile = glob.glob("./lc_*.lcout") 
+if len(lcdatafile) == 0:
+  print("This script must be run in the directory containing the lc_RUNNAME.lcout")
+  print("    file produced with the 'lcout' command. No such file was not found here.")
+  print("    Aborting")
+  exit()
+if len(lcdatafile) > 1:
+  print("Warning: Multiple lc_RUNNAME.lcout files found in this directory")
+  print("    The default behavior is to plot the first one alphabetically")
+
 lcdata = np.loadtxt(lcdatafile[0])
 time = lcdata[:,0]
 meas = lcdata[:,1]

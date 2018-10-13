@@ -143,7 +143,7 @@ This file is read in by the C code and must be in the exact format as the exampl
    ```
    [time (days)] \t [measured flux (normalized)] \t [model flux (normalized)] \t [measured uncertainty (normalized)]
    ```
-2. Transit times files (tbv_XX_XX.out), where the first XX is the body being transited and the second XX is the body doing the transiting. Indexes are 00=star, 01=1st planet, 02= 2nd planet, etc.  
+2. Transit times files (tbv_XX_YY.out), where XX is the body being transited and YY is the body doing the transiting. Indexes are 00=star, 01=1st planet, 02= 2nd planet, etc.  
 
    4 columns:
    ```
@@ -210,7 +210,7 @@ Simple plotting and analysis tools written in Python 2 are available in `example
 
 2. DEMCMC Analysis
 
-   `demcmc_quick_analyze.py` is a python script to perform some standard analysis of the output of a demcmc run. It should be copied to the directory where a demcm_RUNNAME.out file was created, and shoudl be invoked with:
+   `demcmc_quick_analyze.py` is a python script to perform some standard analysis of the output of a demcmc run. It should be copied to the directory where a demcmc_RUNNAME.out file was created, and should be invoked with:
    ```
    $ python demcmc_quick_analyze.py INFILE.in [burnin]
    ``` 

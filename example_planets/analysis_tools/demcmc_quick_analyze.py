@@ -19,17 +19,17 @@ import matplotlib.pyplot as plt
 plt.switch_backend('agg')
 
 if len(sys.argv) == 1:
-  print "You must pass this script a .in file"
-  print "e.g."
-  print "$ python demcmc_quick_analyze.py kepler36_longcadence.in"
+  print("ERROR: You must pass this script a .in file")
+  print("e.g.")
+  print("$ python demcmc_quick_analyze.py kepler36_longcadence.in")
   exit()
 
 fname = sys.argv[1]
 
 burnin = 0
 if len(sys.argv) == 3:
-  burnin = long(sys.argv[2])
-burnin /= 100
+  burnin = int(sys.argv[2])
+burnin //= 100
 
 
 f=open(fname)
@@ -59,10 +59,15 @@ nper=npl+npar+ndead
 #savestr = savestr.partition('.out')[0]
 savestr = runname
 
-print nper, npl, npar, ndead
+print(nper, npl, npar, ndead)
 
 # Read in file
-df1 = pd.read_csv(demcmcfile, sep='\t', header=None, skiprows=lambda x: x % nper >= npl, comment=';')
+try:
+  df1 = pd.read_csv(demcmcfile, sep='\t', header=None, skiprows=lambda x: x % nper >= npl, comment=';')
+except:
+  print("Error: This script must be run in the same directory as the 'demcmc' output file:")
+  print("    demcmc_RUNNAME.out")
+  exit() 
 df2 = pd.read_csv(demcmcfile, sep='\t', header=None, skiprows=lambda x: (x % nper < npl or x % nper >= npl+npar), comment=';')
 
 
@@ -88,28 +93,20 @@ for k in range(nchain):
 allparam = pd.concat(allchs)
 
 
-# Construct list of column names
-#pparamlist=["Planet", "Period", "T0", "sqrt(e)*cosw", "sqrt(e)*sinw", "i", "Omega", "Mjup", "Rp/Rs"]
-#if pperplan > 9:
-#  pparamlist += ["bright", "c_1", "c_2"]
-#sparamlist=["Ms", "Rs", "c_1", "c_2", "dilute"]
-#extralist=["sigma"]
-# Construct list of column names
+## Construct list of column names
+##pparamlist=["Planet", "Period", "T0", "sqrt(e)*cosw", "sqrt(e)*sinw", "i", "Omega", "Mjup", "Rp/Rs"]
+##if pperplan > 9:
+##  pparamlist += ["bright", "c_1", "c_2"]
+##sparamlist=["Ms", "Rs", "c_1", "c_2", "dilute"]
+##extralist=["sigma"]
+## Construct list of column names with fancy text
 pparamlist=["Planet", "Period", "T$_0,$", r"$\sqrt{e}\cos \omega$", r"$\sqrt{e}\sin \omega$", "i", r"$\Omega$", "M$_{jup,}$", "R$_p$/R$_s$"]
 if pperplan > 9:
   pparamlist += ["bright", "c$_1$", "c$_2$"]
 sparamlist=["M$_s$", "R$_s$", "c$_1$", "c$_2$", "dilute"]
 extralist=["$\sigma$"]
 
-#fullplist=[]
-#for i in range(npl):
-#  fullplist += [pi+'_'+str(i) for pi in pparamlist]
-#fullplist += sparamlist
-#for i in range(npar - len(sparamlist)):
-#  fullplist += [a+"_"+str(i) for a in extralist] 
-#fullplist += ["Chain#"]
 fullplist=[]
-
 alphabet = 'bcdefghijklmnopqrstuvwxyz'
 for i in range(npl):
   fullplist += [pi+'$_'+alphabet[i]+'$' for pi in pparamlist]
@@ -123,11 +120,7 @@ fullplist += ["Chain#"]
 # Remove burnin
 allparam.drop(range(burnin), inplace=True)
 
-
 allparam.columns = fullplist
-
-
-
 
 if not os.path.exists('analysis_dir'):
   os.makedirs('analysis_dir')   
@@ -168,10 +161,6 @@ colstrue = [c for c in allparam.columns if (c[:6] != 'Planet' and c != 'Chain#')
 alltrueparam = allparam[colstrue]
 ranges=[(min(alltrueparam.iloc[:,i]), max(alltrueparam.iloc[:,i])) for i in range(alltrueparam.iloc[0].size)]
 ranges=[(i[0],i[0]+1) if i[0] == i[1] else i for i in ranges]
-#colstrue = [c for c in allparam.columns if (c[:6] != 'Planet' and c != 'Chain#')]
-#alltrueparam = allparam[colstrue]
-#ranges=[(min(alltrueparam.iloc[:,i]), max(alltrueparam.iloc[:,i])) for i in range(alltrueparam.iloc[0].size)]
-#ranges=[(i[0],i[0]+1) if i[0] == i[1] else i for i in ranges]
 figure = corner.corner(alltrueparam, range=ranges, top_ticks=True)
 figure.savefig('analysis_dir/cornerplots_'+savestr+'.png')
 
@@ -260,7 +249,7 @@ for i in range(npl):
   mecols.append('M$_%s$' % alphabet[i])
 for i in range(npl):
   mecols.append('$e_%s$' % alphabet[i])
-print mecols
+print(mecols)
 # corner plot es and ms
 mepars = allparam[mecols]
 
@@ -280,7 +269,7 @@ sigma2ul=0.954499736103642*100
 percentiles=[50.-sigma3o2,50.-sigma1o2,50.,50.+sigma1o2,50.+sigma3o2,sigma2ul]
 
 fullplist = allparam.columns 
-print fullplist
+print(fullplist)
 
 for p in fullplist:
   if (p[:6] != 'Planet' and p!= 'Chain#'):

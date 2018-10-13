@@ -5,6 +5,14 @@ import glob
 colorlist = ['b', 'r', 'g', 'y', 'c', 'm', 'midnightblue', 'yellow'] 
 
 lcdatafile = glob.glob("./lc_*.lcout") 
+if len(lcdatafile) == 0:
+  print("This script must be run in the directory containing the lc_RUNNAME.lcout")
+  print("    file produced with the 'lcout' command. No such file was not found here.")
+  print("    Aborting")
+  exit()
+if len(lcdatafile) > 1:
+  print("Warning: Multiple lc_RUNNAME.lcout files found in this directory")
+  print("    The default behavior is to plot the first one alphabetically")
 lcdata = np.loadtxt(lcdatafile[0])
 time = lcdata[:,0]
 meas = lcdata[:,1]
@@ -14,6 +22,10 @@ err = lcdata[:,3]
 tbvfilelist = glob.glob("./tbv[0-9][0-9]_[0-9][0-9].out")
 nfiles = len(tbvfilelist)
 npl = nfiles
+
+if npl == 0:
+  print("Error: no tbvXX_YY.out files found in this directory")
+  exit()
 
 f, axes = plt.subplots(npl, 1, figsize=(5,3*npl))
 axes = list(axes)
@@ -51,8 +63,8 @@ for i in range(nfiles):
   phases = phases[phasesort]
   fluxes = fluxes[phasesort]
 
-  j=0L
-  k=0L
+  j=0
+  k=0
   mbinned = np.zeros(nbins)
   while j < len(phases):
     mbinvals = []
