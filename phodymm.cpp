@@ -3111,16 +3111,10 @@ double Flux_drop_analytical_power_2(double d_radius, double k, double c, double 
         double I_0 = (a+2)/(M_PI*(a-c*a+2));
         double g = 0.5*a;
 
-//printf("tick1\n");
-        if (d_radius < 1-k) return q1(d_radius, k, c, a, g, I_0);
-//printf("tick2\n");
-//printf("%lf %lf %lf\n", fabs(d_radius-1), d_radius, k);
-//printf("%lf %lf %lf %lf\n", k, c, a, g);
         //else if (abs(d_radius-1) < k) return q2(d_radius, k, c, a, g, I_0, 1e-9);
+        if (d_radius < 1-k) return q1(d_radius, k, c, a, g, I_0);
         if (fabs(d_radius-1) < k) return q2(d_radius, k, c, a, g, I_0, 1e-9);
-//printf("tick3\n");
-        //else return 1.0;
-        return 1.0;
+        else return 1.0;
 }
 
 
@@ -3160,43 +3154,12 @@ double onetlc (int nplanets, circle* system, double rstar, double c1, double c2)
             double eps = 1e-9;
             double f = 1.0; // This doesn't seem to do anything in their code
 
-            //2.736103 0.014990 0.800000 0.800000 0.000000 1.000000
-            //printf("here0\n");
-            //printf("%lf %lf %lf %lf %lf %lf\n", d_radius, k, c, a, eps, f);
-            //printf("%i\n", nplanets);
- 
             double thisplanetflux = Flux_drop_analytical_power_2(d_radius, k, c, a, f, eps);
-
-            if (thisplanetflux > 1.0) {
-              printf("here1\n");
-              printf("%lf %lf %lf %lf %lf %lf\n", d_radius, k, c, a, eps, f);
-              printf("%lf\n", Flux_drop_analytical_power_2(d_radius, k, c, a, f, eps));
-              exit(0);
-            }
-
             double thisdrop = 1.0 - thisplanetflux;
-            if (thisdrop > 1.0) {
-              printf("here2\n");
-              printf("thisplanetflux = %lf\n", thisplanetflux);
-              printf("thisdrop = %lf\n", thisdrop);
-              printf("%lf %lf %lf %lf %lf %lf\n", d_radius, k, c, a, eps, f);
-              printf("%lf\n", Flux_drop_analytical_power_2(d_radius, k, c, a, f, eps));
-              exit(0);
-            }
             runningflux -= thisdrop;
-            if (runningflux < 0.0) {
-              printf("here3\n");
-              printf("%lf %lf %lf %lf %lf %lf\n", d_radius, k, c, a, eps, f);
-              printf("%lf\n", Flux_drop_analytical_power_2(d_radius, k, c, a, f, eps));
-              exit(0);
-            }
         } 
 
         flux = runningflux;
-        if (flux < 0.9) {
-          printf("flx = %lf\n", flux);
-        }
-        //printf("%lf\n", flux);   
 
     } else {
         printf("Error: Currently the only LDLAW options are 1 or 2\n");
@@ -3261,7 +3224,6 @@ double *timedlc ( double *times, int *cadences, long ntimes, double **transitarr
         jj=j+1;
         while (cadences[j]==0) jj++;
         t_next = times[n+1];
-        //flux = mttr_flux_general(system, nplanets+1, g0, g1, g2);// /nflux; 
         flux = onetlc (nplanets, system, rstarau, c1, c2);
         fluxlist[n] = flux;
         for (i=0; i<nplanets; i++) {
@@ -3270,7 +3232,6 @@ double *timedlc ( double *times, int *cadences, long ntimes, double **transitarr
         }
         j=jj;
       }
-      //fluxlist[ntimes-1] = mttr_flux_general(system, nplanets+1, g0, g1, g2);
       fluxlist[ntimes-1] = onetlc (nplanets, system, rstarau, c1, c2);
 
 
@@ -3278,7 +3239,6 @@ double *timedlc ( double *times, int *cadences, long ntimes, double **transitarr
       for (n=0; n<ntimes-1; n++) {
         t_cur = times[n];
         t_next = times[n+1];
-        //flux = mttr_flux_general(system, nplanets+1, g0, g1, g2);// /nflux; 
         flux = onetlc (nplanets, system, rstarau, c1, c2);
         fluxlist[n] = flux;
         for (i=0; i<nplanets; i++) {
@@ -3367,7 +3327,6 @@ double *binnedlc ( double *times, int *cadences, long ntimes, double binwidth, i
         double binnedflux=0;
         if (cadences[n] == 1) {
           for (nn=0; nn<nperbin; nn++) {
-            //binnedflux += mttr_flux_general(system, nplanets+1, g0, g1, g2);// /nflux; 
             binnedflux += onetlc (nplanets, system, rstarau, c1, c2);
             if (nn < (nperbin-1)) {
               double t_cur = fulltimelist[(n-nlong) + nlong*nperbin + nn];
@@ -3381,7 +3340,6 @@ double *binnedlc ( double *times, int *cadences, long ntimes, double binwidth, i
           binnedflux = binnedflux/nperbin;
           nlong++;
         } else {
-          //binnedflux += mttr_flux_general(system, nplanets+1, g0, g1, g2);// /nflux; 
           binnedflux += onetlc (nplanets, system, rstarau, c1, c2);
           if (nn < (nperbin-1)) {
             double t_cur = fulltimelist[(n-nlong) + nlong*nperbin];
@@ -3399,7 +3357,6 @@ double *binnedlc ( double *times, int *cadences, long ntimes, double binwidth, i
         int nn;
         double binnedflux=0;
         for (nn=0; nn<nperbin; nn++) {
-          //binnedflux += mttr_flux_general(system, nplanets+1, g0, g1, g2);// /nflux; 
           binnedflux += onetlc (nplanets, system, rstarau, c1, c2);
           if (nn < (nperbin-1)) {
             double t_cur = fulltimelist[n*nperbin+nn];
