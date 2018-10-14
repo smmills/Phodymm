@@ -54,7 +54,9 @@ int NTEMPS;
 int IGT90;
 // turn on positive dilution
 int INCPRIOR;
-//
+// Limb darkening (Pal+2011, or Maxsted+2018)
+int LDLAW;
+// dilution capped?
 int DIGT0;
 // sqrt(e) as parameter?
 int SQRTE;
@@ -1767,7 +1769,14 @@ int getinput(char fname[]) {
   fscanf(inputf, "%s %s %i", type, varname, &MASSSPECTROSCOPY); fgets(buffer, 1000, inputf); 
   fscanf(inputf, "%lf", &SPECMASS); fscanf(inputf, "%lf", &MASSSPECERRPOS); fscanf(inputf, "%lf", &MASSSPECERRNEG); fgets(buffer, 1000, inputf);
   printf("MASS spectroscopy = %i, %lf, %lf, %lf\n", MASSSPECTROSCOPY, SPECMASS, MASSSPECERRPOS, MASSSPECERRNEG);
-  fgets(buffer, 1000, inputf); //l. 29
+  fgets(buffer, 1000, inputf);
+  fgets(buffer, 1000, inputf);
+  fscanf(inputf, "%s %s %i", type, varname, &LDLAW); fgets(buffer, 1000, inputf); 
+  printf("LDLAW = %i\n", LDLAW);
+  if (LDLAW == 1) {
+    printf("Note: this implementation of the Maxsted+2018 power2 law does not account for mutual transits\n");
+  }
+  fgets(buffer, 1000, inputf); 
   fscanf(inputf, "%s %s %i", type, varname, &DIGT0); fgets(buffer, 1000, inputf); 
   fgets(buffer, 1000, inputf);
   fscanf(inputf, "%s %s %i", type, varname, &IGT90); fgets(buffer, 1000, inputf); 
@@ -2474,9 +2483,9 @@ double *devoerr (double **tmte) {
 
 
 
-//// These routines are from Pal 2008
-// from icirc.c
-//
+////// These routines are from Pal 2008
+//// from icirc.c
+////
 typedef struct
 {	double	x0,y0;
 	double	r;
@@ -3033,30 +3042,168 @@ double mttr_flux_general(circle *circles,int ncircle,double c0,double c1,double 
 }
 
 
+//// These routines are from Maxsted 2018
+
+double clip(double a, double b, double c)
+{
+        if (a < b) 
+                return b;
+        else if (a > c) 
+                return c;
+        else 
+                return a;
+}
+
+double q1(double z, double p, double c, double a, double g, double I_0)
+{
+        double zt = clip(z, 0,1-p);
+        double s = 1-zt*zt;
+        double c0 = (1-c+c*pow(s,g));
+        double c2 = 0.5*a*c*pow(s,(g-2))*((a-1)*zt*zt-1);
+        return 1-I_0*M_PI*p*p*(c0 + 0.25*p*p*c2 - 0.125*a*c*p*p*pow(s,(g-1)));
+}
+
+double q2(double z, double p, double c, double a, double g, double I_0, double eps)
+{
+        double zt = clip(z, 1-p,1+p);
+        double d = clip((zt*zt - p*p + 1)/(2*zt),0,1);
+        double ra = 0.5*(zt-p+d);
+        double rb = 0.5*(1+d);
+        double sa = clip(1-ra*ra,eps,1);
+        double sb = clip(1-rb*rb,eps,1);
+        double q = clip((zt-d)/p,-1,1);
+        double w2 = p*p-(d-zt)*(d-zt);
+        double w = sqrt(clip(w2,eps,1));
+        double c0 = 1 - c + c*pow(sa,g);
+        double c1 = -a*c*ra*pow(sa,(g-1));
+        double c2 = 0.5*a*c*pow(sa,(g-2))*((a-1)*ra*ra-1);
+        double a0 = c0 + c1*(zt-ra) + c2*(zt-ra)*(zt-ra);
+        double a1 = c1+2*c2*(zt-ra);
+        double aq = acos(q);
+        double J1 =  (a0*(d-zt)-(2./3.)*a1*w2 + 0.25*c2*(d-zt)*(2.0*(d-zt)*(d-zt)-p*p))*w + (a0*p*p + 0.25*c2*pow(p,4))*aq ;
+        double J2 = a*c*pow(sa,(g-1))*pow(p,4)*(0.125*aq + (1./12.)*q*(q*q-2.5)*sqrt(clip(1-q*q,0.0,1.0)) );
+        double d0 = 1 - c + c*pow(sb,g);
+        double d1 = -a*c*rb*pow(sb,(g-1));
+        double K1 = (d0-rb*d1)*acos(d) + ((rb*d+(2./3.)*(1-d*d))*d1 - d*d0)*sqrt(clip(1-d*d,0.0,1.0));
+        double K2 = (1/3)*c*a*pow(sb,(g+0.5))*(1-d);
+        return 1 - I_0*(J1 - J2 + K1 - K2);
+}
+
+double Flux_drop_analytical_power_2(double d_radius, double k, double c, double a, double f, double eps)
+{
+        /*
+        Calculate the analytical flux drop por the power-2 law.
+        
+        Parameters
+        d_radius : double
+                Projected seperation of centers in units of stellar radii.
+        k : double
+                Ratio of the radii.
+        c : double
+                The first power-2 coefficient.
+        a : double
+                The second power-2 coefficient.
+        f : double
+                The flux from which to drop light from.
+        eps : double
+                Factor (1e-9)
+        */
+        double I_0 = (a+2)/(M_PI*(a-c*a+2));
+        double g = 0.5*a;
+
+//printf("tick1\n");
+        if (d_radius < 1-k) return q1(d_radius, k, c, a, g, I_0);
+//printf("tick2\n");
+//printf("%lf %lf %lf\n", fabs(d_radius-1), d_radius, k);
+//printf("%lf %lf %lf %lf\n", k, c, a, g);
+        //else if (abs(d_radius-1) < k) return q2(d_radius, k, c, a, g, I_0, 1e-9);
+        if (fabs(d_radius-1) < k) return q2(d_radius, k, c, a, g, I_0, 1e-9);
+//printf("tick3\n");
+        //else return 1.0;
+        return 1.0;
+}
+
+
+
+
 // Lightcurve output functions
 //
 // This function computes the lightcurve for a single time given the positions of the planets and properties of the star
-double onetlc (int nplanets, double **rxy, double rstar, double c1, double c2) {
-
+double onetlc (int nplanets, circle* system, double rstar, double c1, double c2) {
+        
     if (nplanets==0) return 1.0;
-
-    circle sun = {0.,0., rstar/rstar};
-    circle system[nplanets+1];
-    system[0] = sun;
-    int i;
-    for (i=0; i<nplanets; i++) {
-      system[i+1].x0 = rxy[i][1]/rstar;
-      system[i+1].y0 = rxy[i][2]/rstar;
-      system[i+1].r = rxy[i][0]/rstar;///rstar;
-   }
-
-    double c0 = 1.0;
-    double g0, g1, g2;
-    g0 = c0-c1-2.0*c2;
-    g1 = c1+2.0*c2;
-    g2 = c2;
  
-    double flux = mttr_flux_general(system, nplanets+1, g0, g1, g2);// /nflux; 
+    double flux;
+
+    // Pal+2011 mutual event law
+    if (LDLAW == 0) {
+    
+        double c0 = 1.0;
+        double g0, g1, g2;
+        g0 = c0-c1-2.0*c2;
+        g1 = c1+2.0*c2;
+        g2 = c2;
+    
+        flux = mttr_flux_general(system, nplanets+1, g0, g1, g2);// /nflux; 
+
+    // Maxsted+2018 power2 law
+    } else if (LDLAW == 1) {
+
+        double runningflux = 1.0;
+        int i;
+        for (i=0; i<nplanets; i++) {
+            //double d_radius = sqrt(pow(rxy[i][1]/rstar, 2) + pow(rxy[i][2]/rstar, 2));
+            double d_radius = sqrt(pow(system[i+1].x0, 2) + pow(system[i+1].y0, 2));
+            double k = system[i+1].r;
+            double c = c1;
+            double a = c2;
+            double eps = 1e-9;
+            double f = 1.0; // This doesn't seem to do anything in their code
+
+            //2.736103 0.014990 0.800000 0.800000 0.000000 1.000000
+            //printf("here0\n");
+            //printf("%lf %lf %lf %lf %lf %lf\n", d_radius, k, c, a, eps, f);
+            //printf("%i\n", nplanets);
+ 
+            double thisplanetflux = Flux_drop_analytical_power_2(d_radius, k, c, a, f, eps);
+
+            if (thisplanetflux > 1.0) {
+              printf("here1\n");
+              printf("%lf %lf %lf %lf %lf %lf\n", d_radius, k, c, a, eps, f);
+              printf("%lf\n", Flux_drop_analytical_power_2(d_radius, k, c, a, f, eps));
+              exit(0);
+            }
+
+            double thisdrop = 1.0 - thisplanetflux;
+            if (thisdrop > 1.0) {
+              printf("here2\n");
+              printf("thisplanetflux = %lf\n", thisplanetflux);
+              printf("thisdrop = %lf\n", thisdrop);
+              printf("%lf %lf %lf %lf %lf %lf\n", d_radius, k, c, a, eps, f);
+              printf("%lf\n", Flux_drop_analytical_power_2(d_radius, k, c, a, f, eps));
+              exit(0);
+            }
+            runningflux -= thisdrop;
+            if (runningflux < 0.0) {
+              printf("here3\n");
+              printf("%lf %lf %lf %lf %lf %lf\n", d_radius, k, c, a, eps, f);
+              printf("%lf\n", Flux_drop_analytical_power_2(d_radius, k, c, a, f, eps));
+              exit(0);
+            }
+        } 
+
+        flux = runningflux;
+        if (flux < 0.9) {
+          printf("flx = %lf\n", flux);
+        }
+        //printf("%lf\n", flux);   
+
+    } else {
+        printf("Error: Currently the only LDLAW options are 1 or 2\n");
+        printf("       Please select one of these\n");
+        exit(0);
+    } 
+     
 
     return flux;
 
@@ -3114,7 +3261,8 @@ double *timedlc ( double *times, int *cadences, long ntimes, double **transitarr
         jj=j+1;
         while (cadences[j]==0) jj++;
         t_next = times[n+1];
-        flux = mttr_flux_general(system, nplanets+1, g0, g1, g2);// /nflux; 
+        //flux = mttr_flux_general(system, nplanets+1, g0, g1, g2);// /nflux; 
+        flux = onetlc (nplanets, system, rstarau, c1, c2);
         fluxlist[n] = flux;
         for (i=0; i<nplanets; i++) {
             system[i+1].x0 += transitarr[i][3]*(t_next-t_cur)/(rstarau);
@@ -3122,21 +3270,24 @@ double *timedlc ( double *times, int *cadences, long ntimes, double **transitarr
         }
         j=jj;
       }
-      fluxlist[ntimes-1] = mttr_flux_general(system, nplanets+1, g0, g1, g2);
+      //fluxlist[ntimes-1] = mttr_flux_general(system, nplanets+1, g0, g1, g2);
+      fluxlist[ntimes-1] = onetlc (nplanets, system, rstarau, c1, c2);
 
 
     } else {
       for (n=0; n<ntimes-1; n++) {
         t_cur = times[n];
         t_next = times[n+1];
-        flux = mttr_flux_general(system, nplanets+1, g0, g1, g2);// /nflux; 
+        //flux = mttr_flux_general(system, nplanets+1, g0, g1, g2);// /nflux; 
+        flux = onetlc (nplanets, system, rstarau, c1, c2);
         fluxlist[n] = flux;
         for (i=0; i<nplanets; i++) {
             system[i+1].x0 += transitarr[i][3]*(t_next-t_cur)/(rstarau);
             system[i+1].y0 += transitarr[i][4]*(t_next-t_cur)/(rstarau);
         }
       }
-      fluxlist[ntimes-1] = mttr_flux_general(system, nplanets+1, g0, g1, g2);
+      //fluxlist[ntimes-1] = mttr_flux_general(system, nplanets+1, g0, g1, g2);
+      fluxlist[ntimes-1] = onetlc(nplanets, system, rstarau, c1, c2);
     }
 
     return fluxlist;
@@ -3216,7 +3367,8 @@ double *binnedlc ( double *times, int *cadences, long ntimes, double binwidth, i
         double binnedflux=0;
         if (cadences[n] == 1) {
           for (nn=0; nn<nperbin; nn++) {
-            binnedflux += mttr_flux_general(system, nplanets+1, g0, g1, g2);// /nflux; 
+            //binnedflux += mttr_flux_general(system, nplanets+1, g0, g1, g2);// /nflux; 
+            binnedflux += onetlc (nplanets, system, rstarau, c1, c2);
             if (nn < (nperbin-1)) {
               double t_cur = fulltimelist[(n-nlong) + nlong*nperbin + nn];
               double t_next = fulltimelist[(n-nlong) + nlong*nperbin + nn + 1];
@@ -3229,7 +3381,8 @@ double *binnedlc ( double *times, int *cadences, long ntimes, double binwidth, i
           binnedflux = binnedflux/nperbin;
           nlong++;
         } else {
-          binnedflux += mttr_flux_general(system, nplanets+1, g0, g1, g2);// /nflux; 
+          //binnedflux += mttr_flux_general(system, nplanets+1, g0, g1, g2);// /nflux; 
+          binnedflux += onetlc (nplanets, system, rstarau, c1, c2);
           if (nn < (nperbin-1)) {
             double t_cur = fulltimelist[(n-nlong) + nlong*nperbin];
             double t_next = fulltimelist[(n-nlong) + nlong*nperbin + 1];
@@ -3246,7 +3399,8 @@ double *binnedlc ( double *times, int *cadences, long ntimes, double binwidth, i
         int nn;
         double binnedflux=0;
         for (nn=0; nn<nperbin; nn++) {
-          binnedflux += mttr_flux_general(system, nplanets+1, g0, g1, g2);// /nflux; 
+          //binnedflux += mttr_flux_general(system, nplanets+1, g0, g1, g2);// /nflux; 
+          binnedflux += onetlc (nplanets, system, rstarau, c1, c2);
           if (nn < (nperbin-1)) {
             double t_cur = fulltimelist[n*nperbin+nn];
             double t_next = fulltimelist[n*nperbin+nn+1];
@@ -3262,6 +3416,7 @@ double *binnedlc ( double *times, int *cadences, long ntimes, double binwidth, i
     }
 
     free(fulltimelist);
+//exit(0); 
     return fluxlist;
 
 }

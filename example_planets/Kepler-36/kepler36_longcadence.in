@@ -45,6 +45,9 @@ int spectroscopy= 0
 // If yes, specify R_STAR (R_SUN), 1-sigma high, and 1-sigma low values. If no, this line is ignored (but must be present)
 int massspectroscopy= 0
 1.153    0.028    0.038
+// Which limb darkening parameterization to use? (0 = Pal+2011 quadratic, 1 = Maxsted+2018 power2)
+// Note that the Maxsted+2018 does not properly handle mutual transit events (but is fine for simultaneous transits)
+int ldlaw= 1
 // Restrict dilution from unresolved sources to be > 0.0 (1=yes, 0=no)
 int digt0= 1
 // Do you want to restrict inclination to > 90 rather than have bimodal distribution centered on 90 (1=yes, 0=no)
