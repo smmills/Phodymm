@@ -108,7 +108,6 @@ int MASSSPECTROSCOPY;
 double SPECMASS;
 double MASSSPECERRPOS;
 double MASSSPECERRNEG;
-int DILUTERANGE=1;
 
 int RANK;
 int SIZE;
@@ -371,8 +370,9 @@ int check_boundaries( double *p0local, long nw) {
     }
   }
   
-  //make sure ld coefficients in range
-  if ( DILUTERANGE && (p0local[nw*pperwalker+npl*pperplan+2] < 0.0 || p0local[nw*pperwalker+npl*pperplan+2] > 1.0 || p0local[nw*pperwalker+npl*pperplan+3] < 0.0 || p0local[nw*pperwalker+npl*pperplan+3] > 1.0) ) notallowed=1;
+  // make sure ld coefficients in range
+  // this prior only applies to the Pal+2011 code
+  if ( (LDLAW == 0) && (p0local[nw*pperwalker+npl*pperplan+2] < 0.0 || p0local[nw*pperwalker+npl*pperplan+2] > 1.0 || p0local[nw*pperwalker+npl*pperplan+3] < 0.0 || p0local[nw*pperwalker+npl*pperplan+3] > 1.0) ) notallowed=1;
  
   free(evector);
  
@@ -3205,11 +3205,6 @@ double *timedlc ( double *times, int *cadences, long ntimes, double **transitarr
         system[i+1].r = transitarr[i][5];
     }
 
-    double c0 = 1.0;
-    double g0, g1, g2;
-    g0 = c0-c1-2.0*c2;
-    g1 = c1+2.0*c2;
-    g2 = c2;
  
     double flux;   
     double t_cur;
@@ -3246,7 +3241,6 @@ double *timedlc ( double *times, int *cadences, long ntimes, double **transitarr
             system[i+1].y0 += transitarr[i][4]*(t_next-t_cur)/(rstarau);
         }
       }
-      //fluxlist[ntimes-1] = mttr_flux_general(system, nplanets+1, g0, g1, g2);
       fluxlist[ntimes-1] = onetlc(nplanets, system, rstarau, c1, c2);
     }
 
@@ -3312,11 +3306,6 @@ double *binnedlc ( double *times, int *cadences, long ntimes, double binwidth, i
         system[i+1].r = transitarr[i][5];
     }
 
-    double c0 = 1.0;
-    double g0, g1, g2;
-    g0 = c0-c1-2.0*c2;
-    g1 = c1+2.0*c2;
-    g2 = c2;
  
     double flux;   
     long n=0;
