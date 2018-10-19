@@ -3317,27 +3317,27 @@ double *binnedlc ( double *times, int *cadences, long ntimes, double binwidth, i
         if (cadences[n] == 1) {
           for (nn=0; nn<nperbin; nn++) {
             binnedflux += onetlc (nplanets, system, rstarau, c1, c2);
-            if (nn < (nperbin-1)) {
+            //if (nn < (nperbin-1)) {
               double t_cur = fulltimelist[(n-nlong) + nlong*nperbin + nn];
               double t_next = fulltimelist[(n-nlong) + nlong*nperbin + nn + 1];
               for (i=0; i<nplanets; i++) {
                 system[i+1].x0 += transitarr[i][3]*(t_next-t_cur)/rstarau;
                 system[i+1].y0 += transitarr[i][4]*(t_next-t_cur)/rstarau;
               }
-            }
+            //}
           }
           binnedflux = binnedflux/nperbin;
           nlong++;
         } else {
           binnedflux += onetlc (nplanets, system, rstarau, c1, c2);
-          if (nn < (nperbin-1)) {
+          //if (nn < (nperbin-1)) {
             double t_cur = fulltimelist[(n-nlong) + nlong*nperbin];
             double t_next = fulltimelist[(n-nlong) + nlong*nperbin + 1];
             for (i=0; i<nplanets; i++) {
               system[i+1].x0 += transitarr[i][3]*(t_next-t_cur)/rstarau;
               system[i+1].y0 += transitarr[i][4]*(t_next-t_cur)/rstarau;
             }
-          }
+          //}
         }
         fluxlist[n] = binnedflux;
       }
@@ -3347,14 +3347,14 @@ double *binnedlc ( double *times, int *cadences, long ntimes, double binwidth, i
         double binnedflux=0;
         for (nn=0; nn<nperbin; nn++) {
           binnedflux += onetlc (nplanets, system, rstarau, c1, c2);
-          if (nn < (nperbin-1)) {
+          //if (nn < (nperbin-1)) {
             double t_cur = fulltimelist[n*nperbin+nn];
             double t_next = fulltimelist[n*nperbin+nn+1];
             for (i=0; i<nplanets; i++) {
               system[i+1].x0 += transitarr[i][3]*(t_next-t_cur)/rstarau;
               system[i+1].y0 += transitarr[i][4]*(t_next-t_cur)/rstarau;
             }
-          }
+          //}
         }
         binnedflux = binnedflux/nperbin;
         fluxlist[n] = binnedflux;
@@ -3838,7 +3838,6 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
       rvbodylist[z] = bigrvlist[(z-1)*5+3]; 
       rvtelelistd[z] = bigrvlist[(z-1)*5+4];
     }
-    printf("here0.8\n");
 
     tve[0]=rvtimelist;
     tve[1]=rvlist;
