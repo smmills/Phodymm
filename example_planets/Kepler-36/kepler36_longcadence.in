@@ -97,7 +97,7 @@ int bimodf= 50
 int bimodlist=
 0	0	0	0	0	0	0	0       
 0	0	0	0	1	0	0	0
-0	0	0	0	0       0 
+0	0	0	0	0    
 //
 // Infrequently Edited Parameters
 //
