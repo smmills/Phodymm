@@ -302,8 +302,9 @@ int check_boundaries( double *p0local, long nw) {
     // make sure i and Omega angles are not cycling through:
     if ( p0local[nw*pperwalker+ip*pperplan+4] < 0.0 || p0local[nw*pperwalker+ip*pperplan+4] > 180.0 ) notallowed=1;
     if ( p0local[nw*pperwalker+ip*pperplan+5] < -180.0 || p0local[nw*pperwalker+ip*pperplan+5] > 180.0 ) notallowed=1;
-    // make sure i>=90
-    if ( IGT90 && (p0local[nw*pperwalker+ip*pperplan+4] < 90.0) ) notallowed=1;
+    // make sure i>=90 or i<= 90
+    if ( (IGT90==1) && (p0local[nw*pperwalker+ip*pperplan+4] < 90.0) ) notallowed=1;
+    if ( (IGT90==2) && (p0local[nw*pperwalker+ip*pperplan+4] > 90.0) ) notallowed=1;
     // make sure m>=0
     if ( MGT0 && (p0local[nw*pperwalker+ip*pperplan+6] < 0.0) ) notallowed=1;
     //make sure density is allowed
@@ -384,7 +385,7 @@ int check_boundaries( double *p0local, long nw) {
 // Helper for computing the priors
 double compute_priors(double *p0local, int i) {
 
-    double xisqtemp = 0.;
+    double neg2logliketemp = 0.;
     const int pperwalker = PPERWALKER;
     const int pperplan = PPERPLAN;
     const int sofd = SOFD;
@@ -418,31 +419,31 @@ double compute_priors(double *p0local, int i) {
           } else if (EPRIOR==2) {
             priorprob = normalpdf(evector[i0]);
           }
-          xisqtemp += -2.0*log( priorprob );
+          neg2logliketemp += -2.0*log( priorprob );
         }
       }
     }
 
     if (SPECTROSCOPY) {
-      if (photoradius > SPECRADIUS) xisqtemp += pow( (photoradius - SPECRADIUS) / SPECERRPOS, 2 );
-      else xisqtemp += pow( (photoradius - SPECRADIUS) / SPECERRNEG, 2 );
+      if (photoradius > SPECRADIUS) neg2logliketemp += pow( (photoradius - SPECRADIUS) / SPECERRPOS, 2 );
+      else neg2logliketemp += pow( (photoradius - SPECRADIUS) / SPECERRNEG, 2 );
     }
 
     if (MASSSPECTROSCOPY) {
-      if (photomass > SPECMASS) xisqtemp += pow( (photomass - SPECMASS) / MASSSPECERRPOS, 2 );
-      else xisqtemp += pow( (photomass - SPECMASS) / MASSSPECERRNEG, 2 );
+      if (photomass > SPECMASS) neg2logliketemp += pow( (photomass - SPECMASS) / MASSSPECERRPOS, 2 );
+      else neg2logliketemp += pow( (photomass - SPECMASS) / MASSSPECERRNEG, 2 );
     }
 
     if (INCPRIOR) {
       int i0;
       for (i0=0; i0<npl; i0++) {
-        xisqtemp += -2.0*log( sin(p0local[i*pperwalker+i0*pperplan+4] *M_PI/180.) ); 
+        neg2logliketemp += -2.0*log( sin(p0local[i*pperwalker+i0*pperplan+4] *M_PI/180.) ); 
       }
     }
 
   free(evector);
 
-  return xisqtemp;
+  return neg2logliketemp;
 
 }
 
@@ -456,7 +457,7 @@ double celerite_fit(double*** flux_rvs, double* p0local, int i, int rvflag, int 
   const int pperwalker = PPERWALKER;
   const int sofd = SOFD;
 
-  double xisq;  
+  double neg2loglike;  
 
   double *xs = flux_rvs[rvflag][0];
   long maxil = (long) xs[0];
@@ -533,7 +534,7 @@ double celerite_fit(double*** flux_rvs, double* p0local, int i, int rvflag, int 
   diffs = solver.dot_solve(dy); 
   llike = -0.5 * (diffs + logdet); 
   
-  xisq = diffs+logdet;
+  neg2loglike = diffs+logdet;
   
   if (verbose) { 
     printf("Celerite params:\n");
@@ -572,7 +573,7 @@ double celerite_fit(double*** flux_rvs, double* p0local, int i, int rvflag, int 
   free(yvarp);
   free(diffys);
 
-  return xisq;
+  return neg2loglike;
 
 }
  
@@ -1691,6 +1692,12 @@ int getinput(char fname[]) {
   fscanf(inputf, "%s %s %lf", type, varname, &EPOCH); fgets(buffer, 1000, inputf);
   fgets(buffer, 1000, inputf);
   fscanf(inputf, "%s %s %li", type, varname, &NWALKERS); fgets(buffer, 1000, inputf);
+#if (demcmc_compile == 1)
+  if (NWALKERS <= 2) {
+    printf("Error: At least 3 walkers are required for the DEMCMC algorithm to function\n");
+    exit(0);
+  }
+#endif
   fgets(buffer, 1000, inputf);
   fscanf(inputf, "%s %s %li", type, varname, &NSTEPS); fgets(buffer, 1000, inputf);
   fgets(buffer, 1000, inputf);
@@ -1809,10 +1816,23 @@ int getinput(char fname[]) {
   }
 
   for (i=0; i<9; i++) fgets(buffer, 1000, inputf);
+  int nfixed = 0;
   for (i=0; i<npl; i++) {
-    for (j=0; j<PPERPLAN; j++) fscanf(inputf, "%i", &PARFIX[PPERPLAN*i+j]); fgets(buffer, 1000, inputf);
+    for (j=0; j<PPERPLAN; j++) {
+      fscanf(inputf, "%i", &PARFIX[PPERPLAN*i+j]);
+      if (PARFIX[PPERPLAN*i+j] == 1) {
+        nfixed++;
+      } 
+    }
+    fgets(buffer, 1000, inputf);
   }
-  for (i=0; i<PSTAR; i++) fscanf(inputf, "%i", &PARFIX[NPL*PPERPLAN+i]); fgets(buffer, 1000, inputf); 
+  for (i=0; i<PSTAR; i++) {
+    fscanf(inputf, "%i", &PARFIX[NPL*PPERPLAN+i]);
+    if (PARFIX[NPL*PPERPLAN+i] == 1) {
+      nfixed++;
+    } 
+  } 
+  fgets(buffer, 1000, inputf); 
   fgets(buffer, 1000, inputf);
   fscanf(inputf, "%s %s %i", type, varname, &SPLITINCO); fgets(buffer, 1000, inputf); 
   fgets(buffer, 1000, inputf);
@@ -1889,7 +1909,14 @@ int getinput(char fname[]) {
   }
 
   PPERWALKER = NPL*PPERPLAN + PSTAR;
-
+  int nfree = PPERWALKER-nfixed;
+#if (demcmc_compile == 1)
+  if (NWALKERS <= nfree) {
+    printf("Warning: N_walkers = %i, N_free = %i\n", NWALKERS, nfree); 
+    printf("         N_Walkers should be > N free parameters.\n"); 
+    printf("         The DEMCMC algorithm may fail to perform correctly.\n");
+  } 
+#endif
   fclose(inputf);
   return 0;
 }
@@ -3887,7 +3914,7 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
   int w;
 
   double gamma;
-  double xisqmin; 
+  double neg2loglikemin; 
   double *gammaN;
 
   int fixedpars = 0;
@@ -3982,17 +4009,27 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
       for (i=0; i<11; i++) {
         cgarbage = fgetc(rebsqf);
       }
-      double rexisqmin;
-      fscanf(rebsqf, "%lf", &rexisqmin);
+      double reneg2loglikemin;
+      fscanf(rebsqf, "%lf", &reneg2loglikemin);
       fclose(rebsqf);
-      xisqmin = rexisqmin;
+      neg2loglikemin = reneg2loglikemin;
      
       printf("Read in Restart best chi sq\n");
-      printf("xisqmin=%lf\n", xisqmin);
+      printf("neg2loglikemin=%lf\n", neg2loglikemin);
       printf("gamma=%lf\n", gamma); 
     
   
   } else {  //if not RESTART
+
+    int j;
+    for (j=0; j<npl; j++) {
+      if ( ((IGT90==1) && p[j*pperplan+4] < 90.) || ((IGT90==2) && p[j*pperplan+4] > 90.) ) {
+        printf("Warning: at least one planet has initial inclination that is not allowed\n");
+        printf("         Compare the igt90 flag in the .in file to the planetary i values in the .pldin file\n");
+        printf("         This may cause initialization to hang.\n");
+        break;
+      } 
+    }
 
     printf("Initializing Walkers\n");
     // take small random steps to initialize walkers
@@ -4010,7 +4047,7 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
             //else p0[i][j][k] = p[j][k] + epsilon;
             p0[i][j][k] = p[j*pperplan+k] + epsilon;
             if ( (int) ceil(disperse) ) p0[i][j][k] += disperse*(1-parfix[j*pperplan+k])*step[j*pperplan+k]*gsl_ran_gaussian(r, 1.0);
-          } while ( (IGT90 && (k==4 && p0[i][j][k] < 90.0)) || (MGT0 && (k==6 && p0[i][j][k] < 0.0)) );
+          } while ( ((IGT90==1) && (k==4 && p0[i][j][k] < 90.0)) || ((IGT90==2) && (k==4 && p0[i][j][k] > 90.0)) || (MGT0 && (k==6 && p0[i][j][k] < 0.0)) );
         }
       }
       for (j=0; j<pstar; j++) {
@@ -4069,19 +4106,19 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
   double **flux = flux_rvs[0];
   double **radvs = flux_rvs[1];
   double *dev = devoerr(flux);
-  double xisq = 0;
+  double neg2loglike = 0;
   long il;
   long maxil = (long) dev[0];
   printf("kk=%li\n", maxil);
  
   if (! CELERITE) { 
-    for (il=0; il<maxil; il++) xisq += dev[il+1]*dev[il+1];
+    for (il=0; il<maxil; il++) neg2loglike += dev[il+1]*dev[il+1];
   } else { // if celerite
-    xisq = celerite_fit(flux_rvs, p, 0, 0, 1);
+    neg2loglike = celerite_fit(flux_rvs, p, 0, 0, 1);
   }
 
-  printf("xisq=%lf\n", xisq);
-  printf("prervjitter\n");
+  printf("pre rvjitter:\n");
+  printf("neg2loglike=%lf\n", neg2loglike);
 
   if (RVS) {
     if (! RVCELERITE) { 
@@ -4096,17 +4133,17 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
           double sigmajitter = p[npl*pperplan+5+jitterindex]*MPSTOAUPD;
           double quadsum = sigmajitter*sigmajitter + radvs[3][1+kj]*radvs[3][1+kj];
           // double check this... factor of 1/2
-          xisq += log(quadsum / (radvs[3][1+kj]*radvs[3][1+kj]) );
+          neg2loglike += log(quadsum / (radvs[3][1+kj]*radvs[3][1+kj]) );
           newelist[1+kj] = sqrt( quadsum );
         }
         radvs[3] = newelist;
       }
       double *rvdev = devoerr(radvs);
       long maxil = (long) rvdev[0];
-      for (il=0; il<maxil; il++) xisq += rvdev[il+1]*rvdev[il+1];
+      for (il=0; il<maxil; il++) neg2loglike += rvdev[il+1]*rvdev[il+1];
       free(rvdev);
     } else { // if rvcelerite
-      xisq += celerite_fit(flux_rvs, p, 0, 1, 1);
+      neg2loglike += celerite_fit(flux_rvs, p, 0, 1, 1);
     }
   }
 
@@ -4122,7 +4159,7 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
         double sigmajitter = p[npl*pperplan+5+RVJITTERTOT+jitterindex];
         double quadsum = sigmajitter*sigmajitter + ttvts[3][1+kj]*ttvts[3][1+kj];
         // check that the index on ttvts should be 2
-        xisq += log(quadsum / (ttvts[3][1+kj]*ttvts[3][1+kj]) );
+        neg2loglike += log(quadsum / (ttvts[3][1+kj]*ttvts[3][1+kj]) );
         newelistttv[1+kj] = sqrt(quadsum);
       }
       ttvts[3] = &newelistttv[0];
@@ -4131,35 +4168,34 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
     double *ttvdev = devoerr(ttvts);
     printf("ttvts\n");
     long maxil = (long) ttvdev[0];
-    for (il=0; il<maxil; il++) xisq += ttvdev[il+1]*ttvdev[il+1];
+    for (il=0; il<maxil; il++) neg2loglike += ttvdev[il+1]*ttvdev[il+1];
     free (ttvdev);
-    printf("4xisq=%lf\n", xisq);
     if (TTVJITTERFLAG) {
       free(newelistttv);
     }
   }
-  printf("postttvjitter\n");
-  printf("xisq=%lf\n", xisq);
+  printf("post ttvjitter:\n");
+  printf("neg2loglike=%lf\n", neg2loglike);
   
 //  double photoradius = int_in[3][0][0]; 
 //  if (SPECTROSCOPY) {
-//    if (photoradius > SPECRADIUS) xisq += pow( (photoradius - SPECRADIUS) / SPECERRPOS, 2 );
-//    else xisq += pow( (photoradius - SPECRADIUS) / SPECERRNEG, 2 );
+//    if (photoradius > SPECRADIUS) neg2loglike += pow( (photoradius - SPECRADIUS) / SPECERRPOS, 2 );
+//    else neg2loglike += pow( (photoradius - SPECRADIUS) / SPECERRNEG, 2 );
 //  }
 //  double photomass = int_in[2][0][0]; 
 //  if (MASSSPECTROSCOPY) {
-//    if (photomass > SPECMASS) xisq += pow( (photomass - SPECMASS) / MASSSPECERRPOS, 2 );
-//    else xisq += pow( (photomass - SPECMASS) / MASSSPECERRNEG, 2 );
+//    if (photomass > SPECMASS) neg2loglike += pow( (photomass - SPECMASS) / MASSSPECERRPOS, 2 );
+//    else neg2loglike += pow( (photomass - SPECMASS) / MASSSPECERRNEG, 2 );
 //  }
-//  printf("xisqnoinc=%lf\n", xisq);
+//  printf("neg2loglikenoinc=%lf\n", neg2loglike);
 //  if (INCPRIOR) {
 //    int i0;
 //    for (i0=0; i0<npl; i0++) {
-//      printf("%lf\n", xisq);
-//      xisq += -2.0*log( sin(p[i0*pperplan+4] *M_PI/180.) ); 
+//      printf("%lf\n", neg2loglike);
+//      neg2loglike += -2.0*log( sin(p[i0*pperplan+4] *M_PI/180.) ); 
 //    }
 //  }
-//  printf("xisqnoe=%lf\n", xisq);
+//  printf("neg2loglikenoe=%lf\n", neg2loglike);
 //  double* evector = malloc(npl*sofd);
 //  if (ECUTON || EPRIOR) {
 //    if (SQRTE) {
@@ -4184,14 +4220,15 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
 //        } else if (EPRIOR==2) {
 //          priorprob = normalpdf(evector[i0]);
 //        }
-//        xisq += -2.0*log( priorprob );
+//        neg2loglike += -2.0*log( priorprob );
 //      }
 //    }
 //  }
 
-  xisq += compute_priors(p, 0);
+  neg2loglike += compute_priors(p, 0);
 
-  printf("xisq=%lf\n", xisq);
+  printf("post priors:\n");
+  printf("neg2loglike=%lf\n", neg2loglike);
   free(dev);
 
   if (CONVERT) {  
@@ -4279,7 +4316,7 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
       }
     }
     fprintf(outfile2, " ; Comments: These coordinates are jacobian (see Lee & Peale 2003).\n");
-    fprintf(outfile2, " ; chisq = %.15lf\n", xisq);
+    fprintf(outfile2, " ; neg2loglike = %.15lf\n", neg2loglike);
 
     if (SQRTE) {
       fprintf(outfile2, "planet         period (d)               T0 (d)              sqrt[e] cos(omega)        sqrt[e] sin(omega)        i (deg)                 Omega (deg)            mp (mjup)              rpors           ");
@@ -4340,7 +4377,7 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
       }
     }
     fprintf(outfile2, " ; Comments: These coordinates are jacobian (see Lee & Peale 2003).\n");
-    fprintf(outfile2, " ; chisq = %.15lf\n", xisq);
+    fprintf(outfile2, " ; neg2loglike = %.15lf\n", neg2loglike);
 
 
     fprintf(outfile2, "planet         a (AU)                   e                       i (deg)                omega (deg)          Omega (deg)               f (deg)               mp (mjup)              rpors           ");
@@ -4393,7 +4430,7 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
       }
     }
     fprintf(outfile2, " ; Comments: These coordinates are jacobian (see Lee & Peale 2003).\n");
-    fprintf(outfile2, " ; chisq = %.15lf\n", xisq);
+    fprintf(outfile2, " ; neg2loglike = %.15lf\n", neg2loglike);
 
     fclose(outfile2);
 
@@ -4426,10 +4463,11 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
   free(flux_rvs);
 
 #elif (demcmc_compile==1)
-  printf("made it3\n");
+  printf("Setup Complete\n");
+  printf("Beginning DEMCMC (this may take a very long time)\n");
   // xi squared array (one value per walker)
-  double *xisq0 = malloc(nwalkers*sofd);
-  double **xisq0N;
+  double *neg2loglike0 = malloc(nwalkers*sofd);
+  double **neg2loglike0N;
 
   for (i=0; i<nwalkers; i++) {
     double ***int_in = dsetup2(&p0local[pperwalker*i], npl);
@@ -4441,13 +4479,13 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
     double **flux = flux_rvs[0];
     double **radvs = flux_rvs[1];
     double *dev = devoerr(flux);
-    double xisqtemp = 0;
+    double neg2logliketemp = 0;
     long il;
     long maxil = (long) dev[0];
     if (! CELERITE) { 
-      for (il=0; il<maxil; il++) xisqtemp += dev[il+1]*dev[il+1];
+      for (il=0; il<maxil; il++) neg2logliketemp += dev[il+1]*dev[il+1];
     } else { // if celerite
-      xisqtemp = celerite_fit(flux_rvs, p0local, i, 0, 0); 
+      neg2logliketemp = celerite_fit(flux_rvs, p0local, i, 0, 0); 
     }
     double *newelist;
  
@@ -4465,7 +4503,7 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
             double sigmajitter = p0local[pperwalker*i+npl*pperplan+5+jitterindex]*MPSTOAUPD;
             double quadsum = sigmajitter*sigmajitter + radvs[3][1+kj]*radvs[3][1+kj];
             // double check this... factor of 1/2
-            xisqtemp += log(quadsum / (radvs[3][1+kj]*radvs[3][1+kj]) );
+            neg2logliketemp += log(quadsum / (radvs[3][1+kj]*radvs[3][1+kj]) );
             newelist[1+kj] = sqrt( quadsum );
           }
           radvs[3] = newelist;
@@ -4473,12 +4511,12 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
 
         double *rvdev = devoerr(radvs);
         long maxil = (long) rvdev[0];
-        for (il=0; il<maxil; il++) xisqtemp += rvdev[il+1]*rvdev[il+1];
+        for (il=0; il<maxil; il++) neg2logliketemp += rvdev[il+1]*rvdev[il+1];
         free(rvdev);
   
   
       } else { // if rvcelerite
-        xisqtemp += celerite_fit(flux_rvs, p0local, i, 1, 0);
+        neg2logliketemp += celerite_fit(flux_rvs, p0local, i, 1, 0);
       } 
     }
 
@@ -4494,25 +4532,25 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
           double sigmajitter = p0local[pperwalker*i+npl*pperplan+5+RVJITTERTOT+jitterindex];
           double quadsum = sigmajitter*sigmajitter + ttvts[3][1+kj]*ttvts[3][1+kj];
           // check that the index on ttvts should be 2
-          xisqtemp += log(quadsum / (ttvts[3][1+kj]*ttvts[3][1+kj]) );
+          neg2logliketemp += log(quadsum / (ttvts[3][1+kj]*ttvts[3][1+kj]) );
           newelistttv[1+kj] = sqrt(quadsum);
         }
         ttvts[3] = newelistttv;
       }
       double *ttvdev = devoerr(ttvts);
       long maxil = (long) ttvdev[0];
-      for (il=0; il<maxil; il++) xisqtemp += ttvdev[il+1]*ttvdev[il+1];
+      for (il=0; il<maxil; il++) neg2logliketemp += ttvdev[il+1]*ttvdev[il+1];
       free (ttvdev);
       if (TTVJITTERFLAG) {
         free(newelistttv);
       }
     }
 
-    xisqtemp += compute_priors(p0local, i); 
+    neg2logliketemp += compute_priors(p0local, i); 
 
     celeritefail:
 
-    xisq0[i] = xisqtemp;
+    neg2loglike0[i] = neg2logliketemp;
  
     //free(evector);
 
@@ -4548,8 +4586,8 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
   
 
   if (! RESTART ) {
-    // set lowest xisq
-    xisqmin = HUGE_VAL;
+    // set lowest neg2loglike
+    neg2loglikemin = HUGE_VAL;
   }
 
 
@@ -4562,10 +4600,10 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
 
   int *acceptanceglobal = malloc(nwalkers*sofi);
   double *p0global = malloc(totalparams*sofd);
-  double *xisq0global = malloc(nwalkers*sofd);
+  double *neg2loglike0global = malloc(nwalkers*sofd);
   int **acceptanceglobalN;
   double **p0globalN;
-  double **xisq0globalN;
+  double **neg2loglike0globalN;
 
 
   // loop over generations
@@ -4653,13 +4691,13 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
         double **nflux = nflux_rvs[0];
         double **nradvs = nflux_rvs[1];
         double *ndev = devoerr(nflux);
-        double nxisqtemp = 0;
+        double nneg2logliketemp = 0;
         long il;
         long maxil = (long) ndev[0];
         if (! CELERITE) { 
-          for (il=0; il<maxil; il++) nxisqtemp += ndev[il+1]*ndev[il+1];
+          for (il=0; il<maxil; il++) nneg2logliketemp += ndev[il+1]*ndev[il+1];
         } else { // if celerite
-          nxisqtemp = celerite_fit(nflux_rvs, p0local, nw, 0, 0);
+          nneg2logliketemp = celerite_fit(nflux_rvs, p0local, nw, 0, 0);
         }
         double *newelist;
         if (RVS) {
@@ -4675,7 +4713,7 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
                 double sigmajitter = p0local[pperwalker*nw+npl*pperplan+5+jitterindex]*MPSTOAUPD;
                 double quadsum = sigmajitter*sigmajitter + nradvs[3][1+kj]*nradvs[3][1+kj];
                 // double check this... factor of 1/2
-                nxisqtemp += log(quadsum / (nradvs[3][1+kj]*nradvs[3][1+kj]) );
+                nneg2logliketemp += log(quadsum / (nradvs[3][1+kj]*nradvs[3][1+kj]) );
                 newelist[1+kj] = sqrt( quadsum );
               }
               nradvs[3] = newelist;
@@ -4683,11 +4721,11 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
     
             double *rvdev = devoerr(nradvs);
             long maxil = (long) rvdev[0];
-            for (il=0; il<maxil; il++) nxisqtemp += rvdev[il+1]*rvdev[il+1];
+            for (il=0; il<maxil; il++) nneg2logliketemp += rvdev[il+1]*rvdev[il+1];
             free(rvdev);
   
           } else { // if rvcelerite
-            nxisqtemp += celerite_fit(nflux_rvs, p0local, nw, 1, 0);
+            nneg2logliketemp += celerite_fit(nflux_rvs, p0local, nw, 1, 0);
           }
         }
         if (TTVCHISQ) {
@@ -4703,7 +4741,7 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
               double sigmajitter = p0local[pperwalker*nw+npl*pperplan+5+RVJITTERTOT+jitterindex];
               double quadsum = sigmajitter*sigmajitter + nttvts[3][1+kj]*nttvts[3][1+kj];
               // check that the index on ttvts should be 2
-              nxisqtemp += log(quadsum / (nttvts[3][1+kj]*nttvts[3][1+kj]) );
+              nneg2logliketemp += log(quadsum / (nttvts[3][1+kj]*nttvts[3][1+kj]) );
               newelistttv[1+kj] = sqrt(quadsum);
             }
             nttvts[3] = newelistttv;
@@ -4711,7 +4749,7 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
         
           double *ttvdev = devoerr(nttvts);
           long maxil = (long) ttvdev[0];
-          for (il=0; il<maxil; il++) nxisqtemp += ttvdev[il+1]*ttvdev[il+1];
+          for (il=0; il<maxil; il++) nneg2logliketemp += ttvdev[il+1]*ttvdev[il+1];
           free (ttvdev);
           if (TTVJITTERFLAG) {
             free(newelistttv);
@@ -4720,9 +4758,9 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
         }
        
 
-        nxisqtemp += compute_priors(p0local, nw);
+        nneg2logliketemp += compute_priors(p0local, nw);
  
-        double xisq = nxisqtemp;
+        double neg2loglike = nneg2logliketemp;
 
         free(nint_in[0][0]);
         free(nint_in[0]);
@@ -4751,7 +4789,7 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
     
         // prob that you should take new state
         double prob;
-        prob = exp((xisq0[nw]-xisq)/2.);
+        prob = exp((neg2loglike0[nw]-neg2loglike)/2.);
  
         double bar = gsl_rng_uniform(rnw);
     
@@ -4759,7 +4797,7 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
         if (prob <= bar || isnan(prob)) {
           acceptance[nw] = 0;
         } else {
-          xisq0[nw] = xisq;
+          neg2loglike0[nw] = neg2loglike;
         } 
   
       }
@@ -4785,14 +4823,14 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
 
     MPI_Allgather(&p0local[nwinit*pperwalker], pperwalker*npercore, MPI_DOUBLE, p0global, pperwalker*npercore, MPI_DOUBLE, MPI_COMM_WORLD);
     MPI_Gather(&acceptance[nwinit], 1*npercore, MPI_INT, acceptanceglobal, 1*npercore, MPI_INT, 0, MPI_COMM_WORLD); 
-    MPI_Gather(&xisq0[nwinit], 1*npercore, MPI_DOUBLE, xisq0global, 1*npercore, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    MPI_Gather(&neg2loglike0[nwinit], 1*npercore, MPI_DOUBLE, neg2loglike0global, 1*npercore, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
     memcpy(p0local, p0global, totalparams*sofd);
 
     int nwdex;
     if (RANK == 0) {
       memcpy(acceptance, acceptanceglobal, nwalkers*sofi);
-      memcpy(xisq0, xisq0global, nwalkers*sofd);
+      memcpy(neg2loglike0, neg2loglike0global, nwalkers*sofd);
 
       long naccept = 0;
       for (nwdex=0; nwdex<nwalkers; nwdex++) naccept += acceptance[nwdex];
@@ -4861,17 +4899,17 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
               fprintf(outfile, "%.15lf ; rvcelerite \n", p0local[nwdex*pperwalker+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+i]);
             }
           }
-          fprintf(outfile, "; chisq = %18.11lf, %i, %li\n", xisq0[nwdex], nwdex, jj);  
+          fprintf(outfile, "; neg2loglike = %18.11lf, %i, %li\n", neg2loglike0[nwdex], nwdex, jj);  
         }
         fclose(outfile);
       }
 
       FILE *outfile2;
       for (nwdex=0; nwdex<nwalkers; nwdex++) {
-        if (xisq0[nwdex] < xisqmin) {
-          xisqmin = xisq0[nwdex];
+        if (neg2loglike0[nwdex] < neg2loglikemin) {
+          neg2loglikemin = neg2loglike0[nwdex];
           sout = fopen("demcmc.stdout", "a");
-          fprintf(sout, "Chain %lu has Best xisq so far: %lf\n", nwdex, xisq0[nwdex]);
+          fprintf(sout, "Chain %lu has Best neg2loglike so far: %lf\n", nwdex, neg2loglike0[nwdex]);
           fclose(sout);
           char outfile2str[80];
           strcpy(outfile2str, "mcmc_bestchisq_");
@@ -4932,7 +4970,7 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
             }
           }
           fprintf(outfile2, " ; Comments: These coordinates are jacobian (see Lee & Peale 2003).   gen = %li   ch=%li\n", jj, nwdex);
-          fprintf(outfile2, " ; chisq = %.15lf\n", xisq0[nwdex]);
+          fprintf(outfile2, " ; neg2loglike = %.15lf\n", neg2loglike0[nwdex]);
           fclose(outfile2);
         }
       }
@@ -4963,7 +5001,7 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
   free(p0local);
   free(p0global);
   free(p0localcopy);
-  free(xisq0global);
+  free(neg2loglike0global);
 
 
   for(i=0; i<nwalkers; i++) {
@@ -4976,7 +5014,7 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
   }
   free(p0);
 
-  free(xisq0);
+  free(neg2loglike0);
 
 #elif (demcmc_compile == 3)
 
