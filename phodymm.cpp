@@ -133,6 +133,7 @@ char TFILE[1000];
 int *PARFIX;
 double T0;
 double T1;
+unsigned long OUTPUTINTERVAL;
 unsigned long SEED;
 double DISPERSE;
 double OPTIMAL;
@@ -1855,6 +1856,14 @@ int getinput(char fname[]) {
   fscanf(inputf, "%s %s %lf", type, varname, &T1); fgets(buffer, 1000, inputf); 
   fgets(buffer, 1000, inputf);
   printf("t1 = %lf\n", T1);
+  fscanf(inputf, "%s %s %lu", type, varname, &OUTPUTINTERVAL); fgets(buffer, 1000, inputf); 
+  fgets(buffer, 1000, inputf);
+  if (OUTPUTINTERVAL <= 0) {
+    printf("Outputinterval must be a positive integer\n");
+    printf("The current value is: %li\n", OUTPUTINTERVAL);
+    printf("If that is not the value you specified, make sure your .in file is formatted correctly.\n");
+    exit(0);
+  }
   fscanf(inputf, "%s %s %lu", type, varname, &SEED); fgets(buffer, 1000, inputf); 
   fgets(buffer, 1000, inputf);
   fscanf(inputf, "%s %s %lf", type, varname, &DISPERSE); fgets(buffer, 1000, inputf); 
@@ -4853,7 +4862,7 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
       }
 
       // print out occasionally
-      if (jj % 100 == 0) { 
+      if (jj % OUTPUTINTERVAL == 0) { 
         char outfilestr[80];
         strcpy(outfilestr, "demcmc_");
         strcat(outfilestr, OUTSTR);

@@ -31,13 +31,21 @@ f, axes = plt.subplots(npl, 1, figsize=(5,3*npl))
 axes = list(axes)
 
 transtimes = [[] for i in range(npl)]
+nums = [[] for i in range(npl)]
 for i in range(nfiles):
   data = np.loadtxt(tbvfilelist[i])
   tt = data[:,1]
   transtimes[i] = tt 
+  nn = data[:,0]
+  nums[i] = nn
 
-phasewidth = 0.4
-collisionwidth = phasewidth #0.15
+phasewidth = [0.4 for i in range(nfiles)]
+for i in range(nfiles):
+  if len(transtimes[i]) > 1:
+    meanper, const = np.linalg.lstsq(np.vstack([nums[i], np.ones(len(nums[i]))]).T, transtimes[i], rcond=None)[0] 
+    # 3x the duration of an edge-on planet around the sun
+    phasewidth[i] = 3.*(13./24.) * ((meanper/365.25)**(1./3.)) 
+collisionwidth = [pwi for pwi in phasewidth] #0.15
 
 for i in range(nfiles):
   phases = []
@@ -46,8 +54,8 @@ for i in range(nfiles):
   othertts = np.array(othertts).flatten()
   thistts = np.array(transtimes[i])
   for tti in thistts:
-    if min(abs(othertts - tti)) > collisionwidth: 
-      trange = np.where(np.abs(time - tti) < phasewidth)[0]
+    if min(abs(othertts - tti)) > collisionwidth[i]: 
+      trange = np.where(np.abs(time - tti) < phasewidth[i])[0]
       phases.append(time[trange] - tti)
       fluxes.append(meas[trange])
   phases = np.hstack(phases)
@@ -55,9 +63,9 @@ for i in range(nfiles):
   axes[i].scatter(phases, fluxes, s=0.01, c='gray', alpha=0.5)
  
   binwidth = 1./1440. * 10.
-  nbins = int(2*phasewidth / binwidth)
-  binedges = np.arange(nbins+1, dtype=np.float)*binwidth - phasewidth 
-  bincenters = np.arange(nbins, dtype=np.float)*binwidth - phasewidth + binwidth/2. 
+  nbins = int(2*phasewidth[i] / binwidth)
+  binedges = np.arange(nbins+1, dtype=np.float)*binwidth - phasewidth[i] 
+  bincenters = np.arange(nbins, dtype=np.float)*binwidth - phasewidth[i] + binwidth/2. 
 
   phasesort = np.argsort(phases)
   phases = phases[phasesort]
@@ -80,7 +88,7 @@ for i in range(nfiles):
       break
 
   axes[i].scatter(bincenters, mbinned, s=1.0, c='k') 
-  axes[i].set_xlim((-phasewidth, phasewidth))
+  axes[i].set_xlim((-phasewidth[i], phasewidth[i]))
   axes[i].set_ylim((min(fluxes), max(fluxes)))
 
 plt.xlabel('Phase (days)')

@@ -105,6 +105,8 @@ int bimodlist=
 double t0= 50.0
 // Integration stop time (days)
 double t1= 1570.0 
+// Interval (in generations) at which to save state of chains
+int outputinterval= 100
 // Pseudo random number generator seed
 int seed= 2
 // Amount to disperse starting guess (set to 0 to avoid dispersion)
