@@ -14,8 +14,6 @@ Then run the `lightcurve_runscript_MODELNAME.sh` script to generate
  (2) Transit times files for each planet
  (3) Ancillary and diagnostic output as described in the Phodymm README.md Appendix
 
-The scripts in example_planets/analysis_tools can then be copied to this directory to produce some quick diagnostic plots 
-
 The models are:
 - 2pl
     This model includes only the photometry short cadence where available, and long cadence otherwise.
@@ -32,6 +30,10 @@ The models are:
     This is the most complete model, likely to be used for publication quality models (by exploring posteriors with DEMCMC)
 
 Note: all models are just first guesses, and are not best-fit or optimal models.  
+
+The scripts in example_planets/analysis_tools can then be copied to this directory to produce some quick diagnostic plots 
+However, since there are non-transiting planets in this example, before running these scripts you should $ rm tbv00_0[2-3].out
+        otherwise they might crash 
 
 
 # DEMCMC Model Fit

@@ -54,7 +54,8 @@ for i in range(nfiles):
   phases = []
   fluxes = []
   othertts = transtimes[:i] + transtimes[i+1:]
-  othertts = np.hstack(np.array(othertts))
+  if len(othertts) > 0:
+    othertts = np.hstack(np.array(othertts))
   thistts = np.array(transtimes[i])
   for tti in thistts:
     if len(othertts) == 0:
