@@ -45,7 +45,7 @@ runname = get_in_value(8)
 demcmcfile='demcmc_'+runname+'.out'
 nchain = int(get_in_value(14))
 npl = int(get_in_value(10)) - 1
-parlist = lines[87]
+parlist = lines[85+npl]
 npar = len(parlist.split())
 ndead=1
 

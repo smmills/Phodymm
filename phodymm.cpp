@@ -514,7 +514,7 @@ double celerite_fit(double*** flux_rvs, double* p0local, int i, int rvflag, int 
   }
   
   if (verbose) {  
-    printf("%lf %lf %lf %lf\n", a_comp[0], b_comp[0], c_comp[0], d_comp[0]);
+    printf("%lf %lf %lf %lf\n", jitter, S0, w0, Q);
   }
 
   VectorXd x = VectorXd::Map(xp, maxil);
@@ -548,20 +548,24 @@ double celerite_fit(double*** flux_rvs, double* p0local, int i, int rvflag, int 
     printf("llike=%lf\n", llike);
   
     VectorXd prediction = solver.predict(dy, x);
+
+    printf("predicted\n");
  
     char tmtefstr[1000];
-    char str1;
+    //memset(tmtefstr, '\0', sizeof(tmtefstr));
+    char str1[100];
     if (rvflag) {
-      str1 = "rv";
+      strcpy(str1, "rv");
     } else {
-      str1 = "lc"; 
+      strcpy(str1, "lc");
     }
     strcpy(tmtefstr, str1);
-    strcpy(tmtefstr, "_");
+    strcat(tmtefstr, "_");
     strcat(tmtefstr, OUTSTR);
     strcat(tmtefstr, ".gp_");
     strcat(tmtefstr, str1);
     strcat(tmtefstr, "out");
+    printf("Saving GP fit to: %s\n", tmtefstr); 
     FILE *tmtef;
     tmtef = fopen(tmtefstr, "a");
     long ijk;
@@ -569,6 +573,8 @@ double celerite_fit(double*** flux_rvs, double* p0local, int i, int rvflag, int 
       fprintf(tmtef, "%.12lf \n", prediction[ijk]);
     }
     fclose(tmtef);// = openf(tmtstr,"w");
+    
+    printf("saved\n");
   }
 
   free(yvarp);

@@ -1,0 +1,1 @@
+example_planets/Kepler-36/kplr011401755_1440_1.txt filter=lfs diff=lfs merge=lfs -text

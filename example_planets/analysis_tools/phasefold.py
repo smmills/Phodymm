@@ -28,7 +28,10 @@ if npl == 0:
   exit()
 
 f, axes = plt.subplots(npl, 1, figsize=(5,3*npl))
-axes = list(axes)
+try:
+  axes = list(axes)
+except:
+  axes = [axes]
 
 transtimes = [[] for i in range(npl)]
 nums = [[] for i in range(npl)]
@@ -51,10 +54,14 @@ for i in range(nfiles):
   phases = []
   fluxes = []
   othertts = transtimes[:i] + transtimes[i+1:]
-  othertts = np.array(othertts).flatten()
+  othertts = np.hstack(np.array(othertts))
   thistts = np.array(transtimes[i])
   for tti in thistts:
-    if min(abs(othertts - tti)) > collisionwidth[i]: 
+    if len(othertts) == 0:
+      trange = np.where(np.abs(time - tti) < phasewidth[i])[0]
+      phases.append(time[trange] - tti)
+      fluxes.append(meas[trange])
+    elif min(abs(othertts - tti)) > collisionwidth[i]: 
       trange = np.where(np.abs(time - tti) < phasewidth[i])[0]
       phases.append(time[trange] - tti)
       fluxes.append(meas[trange])
