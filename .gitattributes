@@ -1,1 +1,5 @@
 example_planets/Kepler-36/kplr011401755_1440_1.txt filter=lfs diff=lfs merge=lfs -text
+example_planets/Kepler-18/kplr008644288_1440_2.txt filter=lfs diff=lfs merge=lfs -text
+example_planets/Kepler-15/kplr011359879_1440_2.txt filter=lfs diff=lfs merge=lfs -text
+example_planets/KOI-142/kplr005446285_1440_2.txt filter=lfs diff=lfs merge=lfs -text
+example_planets/KOI-142/kplr005446285_1440_2_nodetrend.txt filter=lfs diff=lfs merge=lfs -text
