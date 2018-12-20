@@ -1,5 +1,6 @@
 A model of a 3-planet system using a mix of long and short cadence data, and RVs.  
  - RV data taken from Cochran et al. 2011 (http://iopscience.iop.org/article/10.1088/0067-0049/197/1/7/pdf) 
+ - Photometric data must be uncompressed with $ tar -xvf kplr008644288_1440_2.tar.gz 
 
 
 # Single Forward Model

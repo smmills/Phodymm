@@ -1,5 +1,8 @@
 Models of KOI-142 using various different data inputs and model sophistication for demonstration purposes.
-  For a simpler introduction to the code, it is suggested you start with example_planets/Kepler-15, Kepler-18, or Kepler-36.  
+    For a simpler introduction to the code, it is suggested you start with example_planets/Kepler-15, Kepler-18, or Kepler-36.  
+- RV data from Lauren Weiss (CPS and Barros et al. 2014)
+- Photometric data must be uncompressed with $ tar -xvf kplr005446285_1440_2_nodetrend.tar.gz
+                                             $ tar -xvf kplr005446285_1440_2.tar.gz
 
 # Single Forward Model
 
