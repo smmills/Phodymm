@@ -98,16 +98,16 @@ double normalpdf (double x) {
 // Spectroscopy Constraints - Currently only works for single star. Don't use it for multistar. 
 int SPECTROSCOPY;
 // Assumes assymetric Gaussian
-double SPECRADIUS;
-double SPECERRPOS;
-double SPECERRNEG;
+double SPECRADIUS=0.;
+double SPECERRPOS=0.;
+double SPECERRNEG=0.;
 
 // Spectroscopy Constraints - Currently only works for single star. Don't use it for multistar. 
 int MASSSPECTROSCOPY;
 // Assumes assymetric Gaussian
-double SPECMASS;
-double MASSSPECERRPOS;
-double MASSSPECERRNEG;
+double SPECMASS=0.;
+double MASSSPECERRPOS=0.;
+double MASSSPECERRNEG=0.;
 
 int RANK;
 int SIZE;
@@ -1776,12 +1776,20 @@ int getinput(char fname[]) {
   fgets(buffer, 1000, inputf);
   fgets(buffer, 1000, inputf);
   fscanf(inputf, "%s %s %i", type, varname, &SPECTROSCOPY); fgets(buffer, 1000, inputf); 
-  fscanf(inputf, "%lf", &SPECRADIUS); fscanf(inputf, "%lf", &SPECERRPOS); fscanf(inputf, "%lf", &SPECERRNEG); fgets(buffer, 1000, inputf);
+  if (SPECTROSCOPY) {
+    fscanf(inputf, "%lf", &SPECRADIUS); fscanf(inputf, "%lf", &SPECERRPOS); fscanf(inputf, "%lf", &SPECERRNEG); fgets(buffer, 1000, inputf);
+  } else {
+    fgets(buffer, 1000, inputf);
+  }
   printf("spectroscopy = %i, %lf, %lf, %lf\n", SPECTROSCOPY, SPECRADIUS, SPECERRPOS, SPECERRNEG);
   fgets(buffer, 1000, inputf);
   fgets(buffer, 1000, inputf);
   fscanf(inputf, "%s %s %i", type, varname, &MASSSPECTROSCOPY); fgets(buffer, 1000, inputf); 
-  fscanf(inputf, "%lf", &SPECMASS); fscanf(inputf, "%lf", &MASSSPECERRPOS); fscanf(inputf, "%lf", &MASSSPECERRNEG); fgets(buffer, 1000, inputf);
+  if (MASSSPECTROSCOPY) {
+    fscanf(inputf, "%lf", &SPECMASS); fscanf(inputf, "%lf", &MASSSPECERRPOS); fscanf(inputf, "%lf", &MASSSPECERRNEG); fgets(buffer, 1000, inputf);
+  } else {
+    fgets(buffer, 1000, inputf);
+  }
   printf("MASS spectroscopy = %i, %lf, %lf, %lf\n", MASSSPECTROSCOPY, SPECMASS, MASSSPECERRPOS, MASSSPECERRNEG);
   fgets(buffer, 1000, inputf);
   fgets(buffer, 1000, inputf);
@@ -1800,18 +1808,30 @@ int getinput(char fname[]) {
   fscanf(inputf, "%s %s %i", type, varname, &MGT0); fgets(buffer, 1000, inputf); 
   fgets(buffer, 1000, inputf);
   fgets(buffer, 1000, inputf);
-  fscanf(inputf, "%s %s %i", type, varname, &DENSITYCUTON); fgets(buffer, 1000, inputf); 
-  for (i=0; i<npl; i++) fscanf(inputf, "%lf", &MAXDENSITY[i]); fgets(buffer, 1000, inputf); //l.38
+  fscanf(inputf, "%s %s %i", type, varname, &DENSITYCUTON); fgets(buffer, 1000, inputf);
+  if (DENSITYCUTON) { 
+    for (i=0; i<npl; i++) fscanf(inputf, "%lf", &MAXDENSITY[i]); fgets(buffer, 1000, inputf); //l.38
+  } else {
+    fgets(buffer, 1000, inputf);
+  }
   fgets(buffer, 1000, inputf);
   fscanf(inputf, "%s %s %i", type, varname, &SQRTE); fgets(buffer, 1000, inputf); 
   fgets(buffer, 1000, inputf);
   fgets(buffer, 1000, inputf);
-  fscanf(inputf, "%s %s %i", type, varname, &ECUTON); fgets(buffer, 1000, inputf); 
-  for (i=0; i<npl; i++) fscanf(inputf, "%lf", &EMAX[i]); fgets(buffer, 1000, inputf);
+  fscanf(inputf, "%s %s %i", type, varname, &ECUTON); fgets(buffer, 1000, inputf);
+  if (ECUTON) {  
+    for (i=0; i<npl; i++) fscanf(inputf, "%lf", &EMAX[i]); fgets(buffer, 1000, inputf);
+  } else {
+    fgets(buffer, 1000, inputf); 
+  }
   fgets(buffer, 1000, inputf); //l.45
   fgets(buffer, 1000, inputf); //l.45
-  fscanf(inputf, "%s %s %i", type, varname, &EPRIOR); fgets(buffer, 1000, inputf); 
-  for (i=0; i<npl; i++) fscanf(inputf, "%i", &EPRIORV[i]); fgets(buffer, 1000, inputf);
+  fscanf(inputf, "%s %s %i", type, varname, &EPRIOR); fgets(buffer, 1000, inputf);
+  if (EPRIOR) { 
+    for (i=0; i<npl; i++) fscanf(inputf, "%i", &EPRIORV[i]); fgets(buffer, 1000, inputf);
+  } else {
+    fgets(buffer, 1000, inputf);
+  }
   fgets(buffer, 1000, inputf);
   fscanf(inputf, "%s %s %lf", type, varname, &ESIGMA); fgets(buffer, 1000, inputf); 
   fgets(buffer, 1000, inputf);
