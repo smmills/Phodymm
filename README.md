@@ -17,7 +17,7 @@ After those are installed, you may compile Phodymm from source using:
 $ g++ -w -O3 -o lcout -I/yourpathto/celerite/cpp/include -I/yourpathto/celerite/cpp/lib/eigen_3.3.3 -lm -lgsl -lgslcblas -fpermissive phodymm.cpp
 ```
 where you would replace "yourpathto" with the path to your celerite install.
-The `-lm` `-lgsl` and `-lgslcblas` flags should link the compiler to your math libraries (including gsl)
+The `-lm` `-lgsl` and `-lgslcblas` flags should link the compiler to your math libraries (including gsl). You may find you need to include a `-L/yourpathtogsllibraries/lib` before the `-lgsl` link. If you are compiling on a Mac, I recommend you do not use Apple's default g++, but rather one installed from scratch with homebrew/macports to avoid issues with fpermissive. 
 
 This generates an executable called `lcout` (short for light-curve output).
 You may use it to run an N-body model given a data file, input file, and initial conditions file.
