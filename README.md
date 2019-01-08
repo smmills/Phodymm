@@ -4,11 +4,12 @@
 
 This code requires: 
 1. GSL (gnu scientific library - https://www.gnu.org/software/gsl/)
-2. celerite (https://github.com/dfm/celerite)
 
 If you are using the demcmc rather than just running the forward model, it also requires:
-3. MPI (https://www.open-mpi.org)
+2. MPI (https://www.open-mpi.org)
 
+[OPTIONAL] If you wish to use Gaussian processes in the fit, it requires:
+3. celerite (https://github.com/dfm/celerite) 
 
 ## Running the model
 
@@ -17,6 +18,14 @@ After those are installed, you may compile Phodymm from source using:
 $ g++ -w -O3 -o lcout -I/yourpathto/celerite/cpp/include -I/yourpathto/celerite/cpp/lib/eigen_3.3.3 -lm -lgsl -lgslcblas -fpermissive phodymm.cpp
 ```
 where you would replace "yourpathto" with the path to your celerite install.
+or, if you are not using celerite for GPs, you must change the second line from 
+```#define celerite_compile 1```
+to 
+```#define celerite_compile 0```
+and then compile with:
+```
+$ g++ -w -O3 -o lcout -lm -lgsl -lgslcblas -fpermissive phodymm.cpp
+```
 The `-lm` `-lgsl` and `-lgslcblas` flags should link the compiler to your math libraries (including gsl). You may find you need to include a `-L/yourpathtogsllibraries/lib` before the `-lgsl` link. If you are compiling on a Mac, I recommend you do not use Apple's default g++, but rather one installed from scratch with homebrew/macports to avoid issues with fpermissive. 
 
 This generates an executable called `lcout` (short for light-curve output).
@@ -35,6 +44,13 @@ Then recompile with
 ```
 $ mpic++ -w -Ofast -o demcmc -I/yourpathto/celerite/celerite/cpp/include -I/yourpathto/celerite/celerite/cpp/lib/eigen_3.3.3 -lm -lgsl -lgslcblas -lmpi -fpermissive phodymm.cpp
 ```
+or, if you are not using celerite for on line 2 set:
+```#define celerite_compile 0```
+and then compile with:
+```
+$ mpic++ -w -Ofast -o demcmc -lm -lgsl -lgslcblas -lmpi -fpermissive phodymm.cpp
+```
+
 
 This will create an executable called `demcmc` which can be used to run a differential evolution MCMC (DEMCMC). 
 It is recommended you run the demcmc executable on a computing cluster. Some example scripts to run the DEMCMC are included in 

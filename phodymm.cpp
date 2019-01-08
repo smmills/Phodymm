@@ -1,14 +1,20 @@
 #define demcmc_compile 0
+#define celerite_compile 1
 
 // To compile lcout:
 // make sure demcmc_compile is defined as 0
 // Compile with:
 // g++ -w -O3 -o lcout -I/home/smills/celerite/celerite/cpp/include -I/home/smills/celerite/celerite/cpp/lib/eigen_3.3.3 -lm -lgsl -lgslcblas -fpermissive phodymm.cpp 
+// or
+// gcc -w -O3 -o lcout.c -lm -lgsl -lgslcblas -fpermissive phodymm.cpp
+// Run with:
 // ./lcout demcmc.in kep35.pldin [[-rv0=rvs0.file] [-rv1=rvs1.file] ... ]
 
 // To compile demcmc:
 // make sure demcmc_compile is defined as 1
 // mpic++ -w -Ofast -o demcmc -I/home/smills/celerite/celerite/cpp/include -I/home/smills/celerite/celerite/cpp/lib/eigen_3.3.3 -lm -lgsl -lgslcblas -lmpi -fpermissive phodymm.cpp
+// or 
+// mpic++ -w -Ofast -o demcmc -lm -lgsl -lgslcblas -lmpi -fpermissive phodymm.cpp
 // Run with:
 // mpirun ./demcmc demcmc.in kep.pldin
 
@@ -16,7 +22,7 @@
 // make sure demcmc_compile is defined as 3
 // Compile with:
 // $ gcc -Ofast -o stability -lgsl -lgslcblas -fopenmp phodymm.c
-// g++ -w -O3 -o lcout -I/home/smills/celerite/celerite/cpp/include -I/home/smills/celerite/celerite/cpp/lib/eigen_3.3.3 -lm -lgsl -lgslcblas -fpermissive phodymm.cpp
+// g++ -w -O3 -o lcout -lm -lgsl -lgslcblas -fpermissive phodymm.cpp
 
 #if (demcmc_compile==1) 
 #include <mpi.h>
@@ -35,12 +41,14 @@
 #include <float.h>
 #include <gsl/gsl_multimin.h>
 
+#if (celerite_compile == 1)
 // For CELERITE
 #include <cmath>
 #include <iostream>
 #include <Eigen/Core> 
 #include "celerite/celerite.h"
 using Eigen::VectorXd;
+#endif
 
 int CELERITE;
 int NCELERITE=4;
@@ -460,6 +468,7 @@ double compute_priors(double *p0local, int i) {
 
 
 
+#if (celerite_compile == 1)
 // Wrapper for computing a celerite fit and returning the effective chi^2
 double celerite_fit(double*** flux_rvs, double* p0local, int i, int rvflag, int verbose)  { 
 
@@ -593,6 +602,11 @@ double celerite_fit(double*** flux_rvs, double* p0local, int i, int rvflag, int 
   return neg2loglike;
 
 }
+#endif 
+#if (celerite_compile == 0)
+// dummy function if celerite is not used to compile the code 
+double celerite_fit(double*** flux_rvs, double* p0local, int i, int rvflag, int verbose) {} 
+#endif
  
 
 
@@ -1783,6 +1797,13 @@ int getinput(char fname[]) {
   fgets(buffer, 1000, inputf);
   fgets(buffer, 1000, inputf);
   fscanf(inputf, "%s %s %i", type, varname, &CELERITE); fgets(buffer, 1000, inputf);
+#if (celerite_compile == 0)
+  if (CELERITE) {
+    printf("Error: Celerite is set to True, but the code was compiled without celerite functionality\n");
+    printf("Either recompile with celerite, or turn off celerite in the .in file.\n");
+    exit(0);
+  }
+#endif
   if (CELERITE) {
     PSTAR += NCELERITE;//*2
   }
@@ -1790,6 +1811,13 @@ int getinput(char fname[]) {
   fgets(buffer, 1000, inputf);
   fgets(buffer, 1000, inputf);
   fscanf(inputf, "%s %s %i", type, varname, &RVCELERITE); fgets(buffer, 1000, inputf);
+#if (celerite_compile == 0)
+  if (RVCELERITE) {
+    printf("Error: RVCelerite is set to True, but the code was compiled without celerite functionality\n");
+    printf("Either recompile with celerite, or turn off RVcelerite in the .in file.\n");
+    exit(0);
+  }
+#endif
   if (RVCELERITE) {
     PSTAR += NRVCELERITE;//*2
   }
