@@ -1725,7 +1725,7 @@ int getinput(char fname[]) {
   fgets(buffer, 1000, inputf);
   fscanf(inputf, "%s %s %i", type, varname, &CADENCESWITCH); fgets(buffer, 1000, inputf); 
   printf("cadenceswitch = %i\n", CADENCESWITCH);
-  if !(CADENCESWITCH == 0 || CADENCESWITCH == 1  || CADENCESWITCH == 2) {
+  if (!(CADENCESWITCH == 0 || CADENCESWITCH == 1 || CADENCESWITCH == 2)) {
     printf("Error: Cadenceswitch takes only values of 0, 1, or 2.\n");
     exit(0);
   }
@@ -1751,8 +1751,8 @@ int getinput(char fname[]) {
     printf("Error: Multiple-stars are disabled in this version of the code, but you set NSTARSRV=%i\n", NSTARSRV);
     exit(0);
   }
-  if (NSTARSRV < 0 || NTELESCOPES < 1) {
-    printf("Error, invalid value\n");
+  if (RVJITTERFLAG && (NSTARSRV < 0 || NTELESCOPES < 1)) {
+    printf("Error, invalid RV jitter parameter.\n");
     exit(0);
   }
   if (RVJITTERFLAG) {
@@ -1770,13 +1770,13 @@ int getinput(char fname[]) {
     PSTAR += TTVJITTERTOT;//*2
   }
   if (TTVJITTERFLAG && NSTARSTTV > 1) {
-    printf("rvjitterflag, NstarsTTV, Ntelescopes =  %i, %i, %i\n", TTVJITTERFLAG, NSTARSTTV, NTELESCOPESTTV);
+    printf("TTVjitterflag, NstarsTTV, Ntelescopes =  %i, %i, %i\n", TTVJITTERFLAG, NSTARSTTV, NTELESCOPESTTV);
     printf("Error: Multiple-stars are disabled in this version of the code, but you set NSTARSTTV=%i\n", NSTARSTTV);
     exit(0);
   }
-  if (NSTARSTTV < 0 || NTELESCOPESTTV < 1) {
-    printf("rvjitterflag, NstarsRV, Ntelescopes =  %i, %i, %i\n", RVJITTERFLAG, NSTARSRV, NTELESCOPES);
-    printf("Error, invalid value\n");
+  if (TTVJITTERFLAG && (NSTARSTTV < 0 || NTELESCOPESTTV < 1)) {
+    printf("TTVjitterflag, NstarsTTV, Ntelescopes =  %i, %i, %i\n", TTVJITTERFLAG, NSTARSTTV, NTELESCOPESTTV);
+    printf("Error, invalid value for TTV jitter parameters.\n");
     exit(0);
   }
 
@@ -1844,7 +1844,7 @@ int getinput(char fname[]) {
   if (LDLAW == 1) {
     printf("Note: this implementation of the Maxsted+2018 power2 law does not account for mutual transits\n");
   }
-  if !(LDLAW == 0 || LDLAW == 1) {
+  if (!(LDLAW == 0 || LDLAW == 1)) {
     printf("LDLAW = %i\n", LDLAW);
     printf("Error: ldlaw must be 0 or 1\n");
     exit(0);
@@ -1864,7 +1864,8 @@ int getinput(char fname[]) {
     for (i=0; i<npl; i++) fscanf(inputf, "%lf", &MAXDENSITY[i]); fgets(buffer, 1000, inputf); //l.38
     for (i=0; i<npl; i++) {
       if (MAXDENSITY[i] <= 0) {
-      printf("Warning: MAXDENSITY[%i] is <=0, this may cause a crash or hang.\n", i);
+        printf("Warning: MAXDENSITY[%i] is <=0, this may cause a crash or hang.\n", i);
+      }
     }
   } else {
     fgets(buffer, 1000, inputf);
@@ -1878,7 +1879,8 @@ int getinput(char fname[]) {
     for (i=0; i<npl; i++) fscanf(inputf, "%lf", &EMAX[i]); fgets(buffer, 1000, inputf);
     for (i=0; i<npl; i++) {
       if (EMAX[i] <= 0) {
-      printf("Warning: EMAX[%i] is <=0, this may cause a crash or hang.\n", i);
+        printf("Warning: EMAX[%i] is <=0, this may cause a crash or hang.\n", i);
+      }
     }
   } else {
     fgets(buffer, 1000, inputf); 
@@ -1959,7 +1961,8 @@ int getinput(char fname[]) {
   if (T1 <= T0 || EPOCH < T0 || EPOCH > T1) {
     printf("t0 = %lf, epoch=%lf, t1=%lf\n", T0, EPOCH, T1);
     printf("Error: You must have t0 <= epoch <= t1 and t0 < t1.\n");
-    exit(0); 
+    exit(0);
+  } 
   if (PRINTEPOCH > T1 || PRINTEPOCH < EPOCH) { // Perhaps should put PRINTEPOCH into a user chosen entry
     PRINTEPOCH = EPOCH;
   }
@@ -1981,14 +1984,14 @@ int getinput(char fname[]) {
   fscanf(inputf, "%s %s %lf", type, varname, &RELAX); fgets(buffer, 1000, inputf); 
   fgets(buffer, 1000, inputf);
   fscanf(inputf, "%s %s %i", type, varname, &NPERBIN); fgets(buffer, 1000, inputf);
-  if (NPERBIN <= 0 && CADENCSWITCH > 0) {
+  if (CADENCESWITCH > 0 && NPERBIN <= 0) {
     printf("NPERBIN = %i\n", NPERBIN);
     printf("Error: Nperbin must be >= 1\n");
     exit(0);
   } 
   fgets(buffer, 1000, inputf);
   fscanf(inputf, "%s %s %lf", type, varname, &BINWIDTH); fgets(buffer, 1000, inputf); 
-  if (BINWIDTH <= 0 && CADENCSWITCH > 0) {
+  if (CADENCESWITCH > 0 && BINWIDTH <= 0) {
     printf("BINWIDTH = %lf\n", BINWIDTH);
     printf("Error: binwidth must be > 0\n");
     exit(0);
@@ -2313,19 +2316,19 @@ double ***dsetup2 (double *p, const int npl){
   double c1 = p[npl*pperplan+2];
   double c2 = p[npl*pperplan+3];
   double dilute = p[npl*pperplan+4];
-#if (demcmc_compile == 0):
-    if (ms <= 0.) {
-      printf("Warning: Mstar <= 0\n", i);
-      printf("This may cause a crash or hang.\n");
-    }
-    if (rstar <= 0.) {
-      printf("Warning: Rstar <= 0\n", i);
-      printf("This may cause a crash or hang.\n");
-    }
-    if (dilute < 0. || dilute > 1.) {
-      printf("Warning: dilute value is not 0<=dilute<=1\n", i);
-      printf("This may cause a crash or hang.\n");
-    }
+#if (demcmc_compile == 0)
+  if (ms <= 0.) {
+    printf("Warning: Mstar <= 0\n", i);
+    printf("This may cause a crash or hang.\n");
+  }
+  if (rstar <= 0.) {
+    printf("Warning: Rstar <= 0\n", i);
+    printf("This may cause a crash or hang.\n");
+  }
+  if (dilute < 0. || dilute > 1.) {
+    printf("Warning: dilute value is not 0<=dilute<=1\n", i);
+    printf("This may cause a crash or hang.\n");
+  }
 #endif
 
   double bigg = 1.0e0; //Newton's constant
@@ -2356,7 +2359,7 @@ double ***dsetup2 (double *p, const int npl){
     lo[i] = atan2(p[i*pperplan+3],p[i*pperplan+2]);
     mp[i] = p[i*pperplan+6];
 
-#if (demcmc_compile == 0):
+#if (demcmc_compile == 0)
     if (mp[i] < 0.) {
       printf("Warning: mass[%i] < 0\n", i);
     }
