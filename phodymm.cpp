@@ -426,11 +426,21 @@ double compute_priors(double *p0local, int i) {
     }
 
     if (SPECTROSCOPY) {
-      if (photoradius > SPECRADIUS) neg2logliketemp += pow( (photoradius - SPECRADIUS) / SPECERRPOS, 2 );
-      else neg2logliketemp += pow( (photoradius - SPECRADIUS) / SPECERRNEG, 2 );
+      double normalization = 1./(sqrt(2.*M_PI));
+      normalization *= 2./(SPECERRPOS+SPECERRNEG); // normalized asymmetric Gaussian
+      neg2logliketemp += -2.*log(normalization);
+      if (photoradius > SPECRADIUS) {
+        neg2logliketemp += pow( (photoradius - SPECRADIUS) / SPECERRPOS, 2 );
+      }
+      else {
+        neg2logliketemp += pow( (photoradius - SPECRADIUS) / SPECERRNEG, 2 );
+      }
     }
 
     if (MASSSPECTROSCOPY) {
+      double normalization = 1./(sqrt(2.*M_PI));
+      normalization *= 2./(MASSSPECERRPOS+MASSSPECERRNEG); // normalized asymmetric Gaussian
+      neg2logliketemp += -2.*log(normalization);
       if (photomass > SPECMASS) neg2logliketemp += pow( (photomass - SPECMASS) / MASSSPECERRPOS, 2 );
       else neg2logliketemp += pow( (photomass - SPECMASS) / MASSSPECERRNEG, 2 );
     }
@@ -1695,6 +1705,11 @@ int getinput(char fname[]) {
   fgets(buffer, 1000, inputf);
 
   NPL = NBODIES-1;
+  if (NPL < 0) {
+    printf("NPL = %i\n");
+    printf("Error: At least one planet must be present.\n");
+    exit(0);
+  }
 
   fscanf(inputf, "%s %s %lf", type, varname, &EPOCH); fgets(buffer, 1000, inputf);
   fgets(buffer, 1000, inputf);
@@ -1710,6 +1725,10 @@ int getinput(char fname[]) {
   fgets(buffer, 1000, inputf);
   fscanf(inputf, "%s %s %i", type, varname, &CADENCESWITCH); fgets(buffer, 1000, inputf); 
   printf("cadenceswitch = %i\n", CADENCESWITCH);
+  if !(CADENCESWITCH == 0 || CADENCESWITCH == 1  || CADENCESWITCH == 2) {
+    printf("Error: Cadenceswitch takes only values of 0, 1, or 2.\n");
+    exit(0);
+  }
   fgets(buffer, 1000, inputf);
   fscanf(inputf, "%s %s %s", type, varname, TFILE); fgets(buffer, 1000, inputf); 
   fgets(buffer, 1000, inputf);
@@ -1718,9 +1737,8 @@ int getinput(char fname[]) {
 
   if (MULTISTAR) {
     printf("WARNING!\n");
-    printf("Multiple-stars are disable in this version of the code\n");
+    printf("Multiple-stars are disabled in this version of the code\n");
   }
-
   if (MULTISTAR) PPERPLAN = 11;
   else PPERPLAN = 8; 
   printf("pperplan=%i\n", PPERPLAN);
@@ -1728,7 +1746,15 @@ int getinput(char fname[]) {
   fgets(buffer, 1000, inputf);
   fgets(buffer, 1000, inputf);
   fscanf(inputf, "%s %s %i %i %i", type, varname, &RVJITTERFLAG, &NSTARSRV, &NTELESCOPES); fgets(buffer, 1000, inputf);
-  printf("rvjit %i %i %i\n", RVJITTERFLAG, NSTARSRV, NTELESCOPES);
+  printf("rvjitterflag, NstarsRV, Ntelescopes =  %i, %i, %i\n", RVJITTERFLAG, NSTARSRV, NTELESCOPES);
+  if (RVJITTERFLAG && NSTARSRV > 1) {
+    printf("Error: Multiple-stars are disabled in this version of the code, but you set NSTARSRV=%i\n", NSTARSRV);
+    exit(0);
+  }
+  if (NSTARSRV < 0 || NTELESCOPES < 1) {
+    printf("Error, invalid value\n");
+    exit(0);
+  }
   if (RVJITTERFLAG) {
     RVJITTERTOT = NSTARSRV*NTELESCOPES;
     PSTAR += RVJITTERTOT;//*2
@@ -1742,6 +1768,16 @@ int getinput(char fname[]) {
   if (TTVJITTERFLAG) {
     TTVJITTERTOT = NSTARSTTV*NTELESCOPESTTV;
     PSTAR += TTVJITTERTOT;//*2
+  }
+  if (TTVJITTERFLAG && NSTARSTTV > 1) {
+    printf("rvjitterflag, NstarsTTV, Ntelescopes =  %i, %i, %i\n", TTVJITTERFLAG, NSTARSTTV, NTELESCOPESTTV);
+    printf("Error: Multiple-stars are disabled in this version of the code, but you set NSTARSTTV=%i\n", NSTARSTTV);
+    exit(0);
+  }
+  if (NSTARSTTV < 0 || NTELESCOPESTTV < 1) {
+    printf("rvjitterflag, NstarsRV, Ntelescopes =  %i, %i, %i\n", RVJITTERFLAG, NSTARSRV, NTELESCOPES);
+    printf("Error, invalid value\n");
+    exit(0);
   }
 
   fgets(buffer, 1000, inputf);
@@ -1778,25 +1814,40 @@ int getinput(char fname[]) {
   fscanf(inputf, "%s %s %i", type, varname, &SPECTROSCOPY); fgets(buffer, 1000, inputf); 
   if (SPECTROSCOPY) {
     fscanf(inputf, "%lf", &SPECRADIUS); fscanf(inputf, "%lf", &SPECERRPOS); fscanf(inputf, "%lf", &SPECERRNEG); fgets(buffer, 1000, inputf);
+    printf("spectroscopy = %i, %lf, %lf, %lf\n", SPECTROSCOPY, SPECRADIUS, SPECERRPOS, SPECERRNEG);
+    if (SPECRADIUS < 0. || SPECERRPOS < 0. || SPECERRNEG < 0.) {
+       printf("Error: all spectroscopy values must be >= 0\n");
+       exit(0);
+    }
   } else {
     fgets(buffer, 1000, inputf);
+    printf("radius spectroscopy off\n");
   }
-  printf("spectroscopy = %i, %lf, %lf, %lf\n", SPECTROSCOPY, SPECRADIUS, SPECERRPOS, SPECERRNEG);
   fgets(buffer, 1000, inputf);
   fgets(buffer, 1000, inputf);
   fscanf(inputf, "%s %s %i", type, varname, &MASSSPECTROSCOPY); fgets(buffer, 1000, inputf); 
   if (MASSSPECTROSCOPY) {
     fscanf(inputf, "%lf", &SPECMASS); fscanf(inputf, "%lf", &MASSSPECERRPOS); fscanf(inputf, "%lf", &MASSSPECERRNEG); fgets(buffer, 1000, inputf);
+    printf("MASS spectroscopy = %i, %lf, %lf, %lf\n", MASSSPECTROSCOPY, SPECMASS, MASSSPECERRPOS, MASSSPECERRNEG);
+    if (SPECMASS < 0. || MASSSPECERRPOS < 0. || MASSSPECERRNEG < 0.) {
+       printf("Error: all spectroscopy values must be >= 0\n");
+       exit(0);
+    }
   } else {
     fgets(buffer, 1000, inputf);
+    printf("mass spectroscopy off\n");
   }
-  printf("MASS spectroscopy = %i, %lf, %lf, %lf\n", MASSSPECTROSCOPY, SPECMASS, MASSSPECERRPOS, MASSSPECERRNEG);
   fgets(buffer, 1000, inputf);
   fgets(buffer, 1000, inputf);
   fscanf(inputf, "%s %s %i", type, varname, &LDLAW); fgets(buffer, 1000, inputf); 
   printf("LDLAW = %i\n", LDLAW);
   if (LDLAW == 1) {
     printf("Note: this implementation of the Maxsted+2018 power2 law does not account for mutual transits\n");
+  }
+  if !(LDLAW == 0 || LDLAW == 1) {
+    printf("LDLAW = %i\n", LDLAW);
+    printf("Error: ldlaw must be 0 or 1\n");
+    exit(0);
   }
   fgets(buffer, 1000, inputf); 
   fscanf(inputf, "%s %s %i", type, varname, &DIGT0); fgets(buffer, 1000, inputf); 
@@ -1811,6 +1862,10 @@ int getinput(char fname[]) {
   fscanf(inputf, "%s %s %i", type, varname, &DENSITYCUTON); fgets(buffer, 1000, inputf);
   if (DENSITYCUTON) { 
     for (i=0; i<npl; i++) fscanf(inputf, "%lf", &MAXDENSITY[i]); fgets(buffer, 1000, inputf); //l.38
+    for (i=0; i<npl; i++) {
+      if (MAXDENSITY[i] <= 0) {
+      printf("Warning: MAXDENSITY[%i] is <=0, this may cause a crash or hang.\n", i);
+    }
   } else {
     fgets(buffer, 1000, inputf);
   }
@@ -1821,6 +1876,10 @@ int getinput(char fname[]) {
   fscanf(inputf, "%s %s %i", type, varname, &ECUTON); fgets(buffer, 1000, inputf);
   if (ECUTON) {  
     for (i=0; i<npl; i++) fscanf(inputf, "%lf", &EMAX[i]); fgets(buffer, 1000, inputf);
+    for (i=0; i<npl; i++) {
+      if (EMAX[i] <= 0) {
+      printf("Warning: EMAX[%i] is <=0, this may cause a crash or hang.\n", i);
+    }
   } else {
     fgets(buffer, 1000, inputf); 
   }
@@ -1833,7 +1892,10 @@ int getinput(char fname[]) {
     fgets(buffer, 1000, inputf);
   }
   fgets(buffer, 1000, inputf);
-  fscanf(inputf, "%s %s %lf", type, varname, &ESIGMA); fgets(buffer, 1000, inputf); 
+  fscanf(inputf, "%s %s %lf", type, varname, &ESIGMA); fgets(buffer, 1000, inputf);
+  if (ESIGMA <= 0) {
+     printf("Warning ESIGMA <= 0, this may cause a crash or hang.\n");
+  } 
   fgets(buffer, 1000, inputf);
   fscanf(inputf, "%s %s %i", type, varname, &NTEMPS); fgets(buffer, 1000, inputf); 
   printf("sqrte, ecuton, eprior[0], esigma = %i, %i, %i, %lf\n", SQRTE, ECUTON, EPRIORV[0], ESIGMA);
@@ -1849,6 +1911,12 @@ int getinput(char fname[]) {
       fscanf(inputf, "%i", &PARFIX[PPERPLAN*i+j]);
       if (PARFIX[PPERPLAN*i+j] == 1) {
         nfixed++;
+      } else {
+        if (PARFIX[PPERPLAN*i+j] != 0) {
+          printf("Error: All parfix values must be 0 or 1\n");
+          printf("A value of %i was read in.\n", PARFIX[PPERPLAN*i+j]);
+          exit(0);
+        }
       } 
     }
     fgets(buffer, 1000, inputf);
@@ -1857,6 +1925,12 @@ int getinput(char fname[]) {
     fscanf(inputf, "%i", &PARFIX[NPL*PPERPLAN+i]);
     if (PARFIX[NPL*PPERPLAN+i] == 1) {
       nfixed++;
+    } else {
+      if (PARFIX[NPL*PPERPLAN+i] != 0) {
+        printf("Error: All parfix values must be 0 or 1\n");
+        printf("A value of %i was read in.\n", PARFIX[NPL*PPERPLAN+i]);
+        exit(0);
+      }
     } 
   } 
   fgets(buffer, 1000, inputf); 
@@ -1882,6 +1956,14 @@ int getinput(char fname[]) {
   fscanf(inputf, "%s %s %lf", type, varname, &T1); fgets(buffer, 1000, inputf); 
   fgets(buffer, 1000, inputf);
   printf("t1 = %lf\n", T1);
+  if (T1 <= T0 || EPOCH < T0 || EPOCH > T1) {
+    printf("t0 = %lf, epoch=%lf, t1=%lf\n", T0, EPOCH, T1);
+    printf("Error: You must have t0 <= epoch <= t1 and t0 < t1.\n");
+    exit(0); 
+  if (PRINTEPOCH > T1 || PRINTEPOCH < EPOCH) { // Perhaps should put PRINTEPOCH into a user chosen entry
+    PRINTEPOCH = EPOCH;
+  }
+
   fscanf(inputf, "%s %s %lu", type, varname, &OUTPUTINTERVAL); fgets(buffer, 1000, inputf); 
   fgets(buffer, 1000, inputf);
   if (OUTPUTINTERVAL <= 0) {
@@ -1898,9 +1980,19 @@ int getinput(char fname[]) {
   fgets(buffer, 1000, inputf);
   fscanf(inputf, "%s %s %lf", type, varname, &RELAX); fgets(buffer, 1000, inputf); 
   fgets(buffer, 1000, inputf);
-  fscanf(inputf, "%s %s %i", type, varname, &NPERBIN); fgets(buffer, 1000, inputf); 
+  fscanf(inputf, "%s %s %i", type, varname, &NPERBIN); fgets(buffer, 1000, inputf);
+  if (NPERBIN <= 0 && CADENCSWITCH > 0) {
+    printf("NPERBIN = %i\n", NPERBIN);
+    printf("Error: Nperbin must be >= 1\n");
+    exit(0);
+  } 
   fgets(buffer, 1000, inputf);
   fscanf(inputf, "%s %s %lf", type, varname, &BINWIDTH); fgets(buffer, 1000, inputf); 
+  if (BINWIDTH <= 0 && CADENCSWITCH > 0) {
+    printf("BINWIDTH = %lf\n", BINWIDTH);
+    printf("Error: binwidth must be > 0\n");
+    exit(0);
+  } 
   fgets(buffer, 1000, inputf);
   fscanf(inputf, "%s %s %i", type, varname, &LTE); fgets(buffer, 1000, inputf); 
   fgets(buffer, 1000, inputf);
@@ -1910,6 +2002,11 @@ int getinput(char fname[]) {
   fscanf(inputf, "%s %s %lf", type, varname, &DIST2DIVISOR); fgets(buffer, 1000, inputf);
   fgets(buffer, 1000, inputf);
   fscanf(inputf, "%s %s %i", type, varname, &XYZFLAG); fgets(buffer, 1000, inputf);
+  if (XYZFLAG < 0 || XYZFLAG > 6) {
+    printf("XYZFLAG = %i\n", XYZFLAG);
+    printf("Error: XYZFLAG must be in {0, 1, 2, 3, 4, 5, 6}\n");
+    exit(0);
+  }
   fgets(buffer, 1000, inputf);
   if (XYZFLAG==1 || XYZFLAG==2 || XYZFLAG==3) {
     XYZLIST=malloc(npl*sofi);
@@ -1917,7 +2014,7 @@ int getinput(char fname[]) {
     for (j=0; j<npl; j++) fscanf(inputf, "%i", &XYZLIST[j]);
     fgets(buffer, 1000, inputf);
   } else {
-    XYZLIST=calloc(npl, sofi);
+    XYZLIST = calloc(npl, sofi);
     fgets(buffer, 1000, inputf);
   }
   fgets(buffer, 1000, inputf);
@@ -1927,8 +2024,8 @@ int getinput(char fname[]) {
   fgets(buffer, 1000, inputf);
   fscanf(inputf, "%s %s", type, varname); for (i=0; i<PSTAR; i++) fscanf(inputf, "%lf", &SSTEP[i]); fgets(buffer, 1000, inputf); 
   fgets(buffer, 1000, inputf);
-  fscanf(inputf, "%s %s %i", type, varname, &STEPFLAG); fgets(buffer, 1000, inputf); 
 
+  fscanf(inputf, "%s %s %i", type, varname, &STEPFLAG); fgets(buffer, 1000, inputf); 
   if (STEPFLAG) {
     for (i=0; i<9; i++) fgets(buffer, 1000, inputf);
     for (i=0; i<npl; i++) {
@@ -1941,6 +2038,13 @@ int getinput(char fname[]) {
     free(CSTEP);
     for (i=0; i<npl; i++) memcpy(&STEP[i*PPERPLAN], &PSTEP[0], PPERPLAN*sofd);
     memcpy(&STEP[NPL*PPERPLAN], &SSTEP[0], PSTAR*sofd);
+  }
+  
+  for (j=0; j<PPERPLAN+PSTAR; j++) {
+    if (PSTEP[j] <= 0. && PARFIX[j] != 1) {
+      printf("Warning: PSTEP[%i] = %lf \n", j, PSTEP[j]);
+      printf("Setting PSTEP <= 0 may cause the code to crash or hang if PARFIX != 1\n");
+    }
   }
 
   PPERWALKER = NPL*PPERPLAN + PSTAR;
@@ -2209,6 +2313,20 @@ double ***dsetup2 (double *p, const int npl){
   double c1 = p[npl*pperplan+2];
   double c2 = p[npl*pperplan+3];
   double dilute = p[npl*pperplan+4];
+#if (demcmc_compile == 0):
+    if (ms <= 0.) {
+      printf("Warning: Mstar <= 0\n", i);
+      printf("This may cause a crash or hang.\n");
+    }
+    if (rstar <= 0.) {
+      printf("Warning: Rstar <= 0\n", i);
+      printf("This may cause a crash or hang.\n");
+    }
+    if (dilute < 0. || dilute > 1.) {
+      printf("Warning: dilute value is not 0<=dilute<=1\n", i);
+      printf("This may cause a crash or hang.\n");
+    }
+#endif
 
   double bigg = 1.0e0; //Newton's constant
   double ghere = G; //2.9591220363e-4; 
@@ -2236,7 +2354,17 @@ double ***dsetup2 (double *p, const int npl){
     inc[i] = p[i*pperplan+4]*M_PI/180;
     bo[i] = p[i*pperplan+5]*M_PI/180;
     lo[i] = atan2(p[i*pperplan+3],p[i*pperplan+2]);
-    mp[i]= p[i*pperplan+6];
+    mp[i] = p[i*pperplan+6];
+
+#if (demcmc_compile == 0):
+    if (mp[i] < 0.) {
+      printf("Warning: mass[%i] < 0\n", i);
+    }
+    if (e[i] > 1.) {
+      printf("Warning: e[%i] > 1\n", i);
+      printf("This may cause a crash or hang.\n");
+    }
+#endif
  
     mpjup[i] = mp[i]*jos;       //          ; M_Jup
     msys[i+1] = msys[i]+mpjup[i];

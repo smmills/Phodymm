@@ -18,7 +18,7 @@ long nsteps= 1000
 // Data cadence type switch. 0 = short cadence data, 1 = long cadence data, 2 = mixed
 int cadenceswitch= 1
 // File path and name for data
-string tfile= ./kplr011401755_1440_1.txt 
+string tfile= ./kplr011401755_1440_1a.txt 
 // Does the system have more than one star? 0=no, 1=yes
 // If yes (1), the following arrays should include the values in brackets, if no (0), omit them
 int multistar= 0
