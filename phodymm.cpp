@@ -71,6 +71,9 @@ int SQRTE;
 // restrict masses to > 0
 int MGT0;
 double MASSHIGH; 
+int MASSPRIOR;
+double *MASSPRIORCENTERS;
+double *MASSPRIORSIGMAS;
 // density cuts
 int DENSITYCUTON;
 double *MAXDENSITY;// g/cm^3
@@ -431,6 +434,16 @@ double compute_priors(double *p0local, int i) {
           neg2logliketemp += -2.0*log( priorprob );
         }
       }
+    }
+
+    if (MASSPRIOR) {
+      int i0;
+      for (i0=0; i0<NPL; i0++) {
+        double massi = p0local[i*pperwalker+i0*pperplan+6] / MSOMJ;
+        double massratioi = massi / photomass;
+        neg2logliketemp += -2.*log(1./(sqrt(2.*M_PI)*MASSPRIORSIGMAS[i0]));
+        neg2logliketemp += pow((massratioi - MASSPRIORCENTERS[i0])/MASSPRIORSIGMAS[i0], 2);
+      } 
     }
 
     if (SPECTROSCOPY) {
@@ -1834,6 +1847,8 @@ int getinput(char fname[]) {
   MAXDENSITY = malloc(NPL*sofd);
   EMAX = malloc(NPL*sofd); 
   EPRIORV = malloc(NPL*sofd);
+  MASSPRIORCENTERS = malloc(NPL*sofd);
+  MASSPRIORSIGMAS = malloc(NPL*sofd);
 
   const int npl = NPL;
 
@@ -1899,7 +1914,34 @@ int getinput(char fname[]) {
     fgets(buffer, 1000, inputf);
   }
   fgets(buffer, 1000, inputf);
+  fgets(buffer, 1000, inputf);
+  fgets(buffer, 1000, inputf);
+  fscanf(inputf, "%s %s %i", type, varname, &MASSPRIOR); fgets(buffer, 1000, inputf);
+  if (MASSPRIOR) { 
+    for (i=0; i<npl; i++) fscanf(inputf, "%lf", &MASSPRIORCENTERS[i]); fgets(buffer, 1000, inputf); 
+    for (i=0; i<npl; i++) fscanf(inputf, "%lf", &MASSPRIORSIGMAS[i]); fgets(buffer, 1000, inputf); 
+    for (i=0; i<npl; i++) {
+      printf("Mass ratio prior for planet %i: %lf +/- %lf\n", i+1, MASSPRIORCENTERS[i], MASSPRIORSIGMAS[i]);
+      if (MASSPRIORCENTERS[i] < 0) {
+        printf("Warning: MASSPRIORCENTERS[%i] is <0. This will work as expected but may be unphysical.\n", i);
+      }
+      if (MASSPRIORSIGMAS[i] <= 0) {
+        printf("Error: MASSPRIORSIGMAS[%i] = %lf\n", i, MASSPRIORSIGMAS[i]);
+        printf("       Mass uncertainties must be >= 0.\n");
+        if (MASSPRIORSIGMAS[i] == 0) {
+           printf("To fix a mass, use parfix in the .in file rather than setting MassPriorSigma = 0.\n");
+        }
+        exit(0);
+      }
+    }
+  } else {
+    fgets(buffer, 1000, inputf);
+    fgets(buffer, 1000, inputf);
+  }
+  
+  fgets(buffer, 1000, inputf);
   fscanf(inputf, "%s %s %i", type, varname, &SQRTE); fgets(buffer, 1000, inputf); 
+  //printf("%s\n", buffer);
   fgets(buffer, 1000, inputf);
   fgets(buffer, 1000, inputf);
   fscanf(inputf, "%s %s %i", type, varname, &ECUTON); fgets(buffer, 1000, inputf);
@@ -1991,9 +2033,6 @@ int getinput(char fname[]) {
     printf("Error: You must have t0 <= epoch <= t1 and t0 < t1.\n");
     exit(0);
   } 
-  if (PRINTEPOCH > T1 || PRINTEPOCH < EPOCH) { // Perhaps should put PRINTEPOCH into a user chosen entry
-    PRINTEPOCH = EPOCH;
-  }
 
   fscanf(inputf, "%s %s %lu", type, varname, &OUTPUTINTERVAL); fgets(buffer, 1000, inputf); 
   fgets(buffer, 1000, inputf);
@@ -2031,6 +2070,13 @@ int getinput(char fname[]) {
   fscanf(inputf, "%s %s %lf", type, varname, &OFFSETMIN); fgets(buffer, 1000, inputf); 
   fscanf(inputf, "%s %s %lf", type, varname, &OFFSETMINOUT); fgets(buffer, 1000, inputf); 
   fscanf(inputf, "%s %s %lf", type, varname, &DIST2DIVISOR); fgets(buffer, 1000, inputf);
+  fgets(buffer, 1000, inputf);
+  fscanf(inputf, "%s %s %lf", type, varname, &PRINTEPOCH); fgets(buffer, 1000, inputf);
+  if (PRINTEPOCH > T1 || PRINTEPOCH < EPOCH) { 
+    printf("Warning: We must have: epoch <= printepoch <= t1\n");
+    printf("         printepoch was outside this range so printepoch was set to epoch (this should not be a problem in most cases)\n"); 
+    PRINTEPOCH = EPOCH;
+  }
   fgets(buffer, 1000, inputf);
   fscanf(inputf, "%s %s %i", type, varname, &XYZFLAG); fgets(buffer, 1000, inputf);
   if (XYZFLAG < 0 || XYZFLAG > 6) {
@@ -2071,10 +2117,10 @@ int getinput(char fname[]) {
     memcpy(&STEP[NPL*PPERPLAN], &SSTEP[0], PSTAR*sofd);
   }
   
-  for (j=0; j<PPERPLAN+PSTAR; j++) {
-    if (PSTEP[j] <= 0. && PARFIX[j] != 1) {
-      printf("Warning: PSTEP[%i] = %lf \n", j, PSTEP[j]);
-      printf("Setting PSTEP <= 0 may cause the code to crash or hang if PARFIX != 1\n");
+  for (j=0; j<PPERPLAN*NPL+PSTAR; j++) {
+    if (STEP[j] <= 0. && PARFIX[j] != 1) {
+      printf("Warning: STEP[%i] = %lf \n", j, STEP[j]);
+      printf("Setting STEP <= 0 may cause the code to crash or hang if PARFIX != 1\n");
     }
   }
 
@@ -5345,7 +5391,7 @@ int main (int argc, char *argv[]) {
   }
   free(RVFARR);
   free(PARFIX); free(PSTEP); free(SSTEP); free(STEP); free(BIMODLIST); free(OUTSTR); free(RVARR);
-  free(MAXDENSITY); free(EMAX); free(EPRIORV);
+  free(MAXDENSITY); free(EMAX); free(EPRIORV); free(MASSPRIORCENTERS); free(MASSPRIORSIGMAS);
 
   free(XYZLIST);
 

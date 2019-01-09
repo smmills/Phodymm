@@ -3,13 +3,16 @@
 ## Requirements
 
 This code requires: 
-1. GSL (gnu scientific library - https://www.gnu.org/software/gsl/)
+
+  1. GSL (gnu scientific library - https://www.gnu.org/software/gsl/)
 
 If you are using the demcmc rather than just running the forward model, it also requires:
-2. MPI (https://www.open-mpi.org)
+
+  2. MPI (https://www.open-mpi.org)
 
 [OPTIONAL] If you wish to use Gaussian processes in the fit, it requires:
-3. celerite (https://github.com/dfm/celerite) 
+
+  3. celerite (https://github.com/dfm/celerite) 
 
 ## Running the model
 
