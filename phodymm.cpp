@@ -4056,11 +4056,14 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
         while (fscanf(rvfile, "%lf %lf %lf %i", &rvtimelist[vv+1], &rvlist[vv+1], &rverrlist[vv+1], &rvtelelist[vv+1]) == 4) { 
           rvbodylist[vv+1] = (double) i;
           if (vv>=rvlistlen-1) {
-            timelistlen+=1000;
+            rvlistlen+=1000;
             rvtimelist = realloc(rvtimelist, rvlistlen*sofd);
             rvlist = realloc(rvlist, rvlistlen*sofd);
             rverrlist = realloc(rverrlist, rvlistlen*sofd);
-            if (rverrlist==NULL) {
+            rvbodylist = realloc(rvbodylist, rvlistlen*sofd);
+            rvtelelist = realloc(rvtelelist, rvlistlen*sofi);
+            rvtelelistd = realloc(rvtelelistd, rvlistlen*sofd); 
+            if (rverrlist==NULL || rvtelelistd==NULL) {
               sout = fopen("demcmc.stdout", "a");
               fprintf(sout, "rvlist allocation failure\n");
               fclose(sout);
