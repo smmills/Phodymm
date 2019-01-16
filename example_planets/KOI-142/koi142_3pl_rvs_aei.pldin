@@ -1,0 +1,12 @@
+planet  a (AU)		e               i (deg)		omega(deg)              Omega			M (deg)             mp (mjup)              rpors           
+0.1	0.09622899     	0.05610660     	90.92          	178.700000            	0.000000000 		262.7000000    	    0.026100600000000	0.022690594162307
+0.2	0.15476171   	0.05866515  	88.69 		-0.8901000          	1.516000000 		335.4000000 	    0.682300000000000	0.100000000000000
+0.3	2.49725877 	0.45710000  	89.00 		5.83700000      	0.000000000 		109.30000000 	    3.057547000000000	0.100000000000000
+0.997548 ; Mstar (M_sol)
+0.920708 ; Rstar (R_sol)
+0.451816004012444 ; c1 (linear limb darkening) 
+0.364797761335897 ; c2 (quadratic limb darkening) 
+0.000000000000000 ; dilution (frac light not from stars in system)
+6.4 ; rvjitter HIRES 
+10.5 ; rvjitter SOPHIE
+ ; Comments: These coordinates are aei 
