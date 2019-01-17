@@ -137,7 +137,7 @@ double dist2divisor= 3.0
 // Time for lcout to print osculating elements besides Tepoch 
 double printepoch= 800.0
 // Are any planet initial conditions given in (x y z vx vy vz) or any other non-standard style rather than orbital elements, 0=no, 1=yes,Jacobian, 2=yes,Stellar-Centric, 3=yes,Barycentric, 4=mcmcout form, 5=aei not pt0, 6=mean/true anomaly
-int xyzflag= 6
+int xyzflag= 5
 // Which planet inputs are in x y z vx vy vz style (1 indicates xyz, 0 indicates orbital elements)
 int xyzlist= 0 0 
 // Initial guess at step size for planet parameters
