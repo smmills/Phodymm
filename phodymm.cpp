@@ -1,5 +1,5 @@
-#define demcmc_compile 0
-#define celerite_compile 1
+#define demcmc_compile 1
+#define celerite_compile 0
 
 // To compile lcout:
 // make sure demcmc_compile is defined as 0
