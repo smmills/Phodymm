@@ -32,7 +32,7 @@ $ g++ -w -O3 -o lcout -lm -lgsl -lgslcblas -fpermissive phodymm.cpp
 The `-lm` `-lgsl` and `-lgslcblas` flags should link the compiler to your math libraries (including gsl). You may find you need to include a `-L/yourpathtogsllibraries/lib` before the `-lgsl` link. If you are compiling on a Mac, I recommend you do not use Apple's default g++, but rather one installed from scratch with homebrew/macports to avoid issues with fpermissive. 
 
 This generates an executable called `lcout` (short for light-curve output).
-You may use it to run an N-body model given a data file, input file, and initial conditions file.
+You may use it to run a forward N-body model given a data file, input file, and initial conditions file.
 The output will be a theoretical lightcurve and list of transit times.  
 For an example, see the readme.txt in `example_planets/Kepler-36`
 
@@ -133,7 +133,19 @@ This file is read in by the C code and must be in the exact format as the exampl
    ```
    Where T0 is the time of conjunction of the planet and the star, i is the incliation, Omega is the nodal angle, and omega is the argument of periastron with the coordinate system such that the sky plane is 0. This initial condition is transformed into the basis selected in the input file before fitting (e.g. {e, omega} -> {sqrt(e)*sin(omega), sqrt(e)*cos(omega)).   
    
-   Planets should be entered in increasing order of orbital period.  
+   Planets should be entered in increasing order of orbital period. 
+
+   Other options for xyzflag are 1 (Jacobian Cartesian coordinates), 2 (Stellar-centric Cartesian coordinates), or 3 (barycentric Cartesian Coordinates) with format
+   ```
+   [Planet Label] \t  [x] \t [y] \t [z] \t [v_x] \t [v_y] \t [v_z] \t [Mass] \t [Rp/Rstar]
+   ```
+   where the units are AU and AU/day. If any of these options are selected, xyzlist must be set to 1 for each planet.
+
+   You can also choose xyzflag= 5 or xyzflag= 6 to enter elements in a-e-i basis:
+   ```
+   [Planet Label] \t  [a (AU)] \t [e] \t [i (deg)] \t [Omega (deg)] \t [omega(deg)] \t [angle (deg)] \t [Mass] \t [Rp/Rstar]
+   ```
+   where angle is the true anomaly for xyzflag= 5, and the mean anomaly for xyzflag= 6. 
 
 
 4. [Optional] Radial Velocity Dataset
@@ -175,13 +187,22 @@ This file is read in by the C code and must be in the exact format as the exampl
    *  aei_NAME.aeiout
    Descriptions within these files specify the coordinate system used for each entry within. 
 
-4. [Optional] Celerite Continuum Fit  
+4. [Optional] RV Output Files, (rv_XX_NAME.rvout), where XX is the index of the body for which RVs are reported (00 = the central star) and NAME is the run name. 
+   Format is: 
+   ```
+   [time (days)] [Measured RV (m/s)] [Modeled RV (m/s)] [Uncertainty (m/s)] [Telescope Index]
+   ```  
+   The calculated RV offset for each telescope is printed at the bottom of the file.
+
+5. [Optional] Celerite Continuum Fit  
 
    This file shows the Gaussian Process the celerite fit to the continuum if a celerite fit was chosen. It's format is 
    ```
    [time] [flux]
    ```
- 
+
+6. [Optional] Positions of the Bodies at time = PRINTEPOCH, named xyz_adjusted_NAME.xyzout, where NAME is the run name. Similar to xyz_NAME.xyzout, but at a different epoch time, and only one coordinate system is given. 
+
 
 ### MCMC Fit (`demcmc`) Output Files
 
