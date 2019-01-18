@@ -51,7 +51,7 @@ int ldlaw= 0
 // Restrict dilution from unresolved sources to be > 0.0 (1=yes, 0=no)
 int digt0= 1
 // Do you want to restrict inclination to > 90 rather than have bimodal distribution centered on 90 (0=no, 1=yes, 2=restrict to <90)
-int igt90= 2
+int igt90= 0
 // Do you want to impose a sin(i) prior on i to account for geometric effects (1=yes, 0=no)
 int incprior= 0
 // Restrict planet masses to positive values (1=yes, 0=no)
