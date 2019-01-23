@@ -45,7 +45,7 @@ runname = get_in_value(8)
 demcmcfile='demcmc_'+runname+'.out'
 nchain = int(get_in_value(14))
 npl = int(get_in_value(10)) - 1
-parlist = lines[85+npl]
+parlist = lines[91+npl]
 npar = len(parlist.split())
 ndead=1
 
@@ -63,10 +63,17 @@ print(nper, npl, npar, ndead)
 # Read in file
 try:
   df1 = pd.read_csv(demcmcfile, sep='\t', header=None, skiprows=lambda x: x % nper >= npl, comment=';')
-except:
+except IOError:
   print("Error: This script must be run in the same directory as the 'demcmc' output file:")
-  print("    demcmc_RUNNAME.out")
+  print("    "+demcmcfile)
   exit() 
+except Exception:
+  print("The .in file was apparently parsed incorrectly, or your demcmc_NAME.out file has been corrupted.")
+  print("   The .in file parsing has obtained the following values:"
+  print("   N planets = %i" % npl)
+  print("   N non-planet parameters (5 stellar + jitter + GPs) = %i" % npar)
+  print("   N total rows per parameter set in the demcmc_NAME.out file = %i" % nper)
+  print("")
 df2 = pd.read_csv(demcmcfile, sep='\t', header=None, skiprows=lambda x: (x % nper < npl or x % nper >= npl+npar), comment=';')
 
 

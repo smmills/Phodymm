@@ -21,7 +21,7 @@ After those are installed, you may compile Phodymm from source using:
 $ g++ -w -O3 -o lcout -I/yourpathto/celerite/cpp/include -I/yourpathto/celerite/cpp/lib/eigen_3.3.3 -lm -lgsl -lgslcblas -fpermissive phodymm.cpp
 ```
 where you would replace "yourpathto" with the path to your celerite install.
-or, if you are not using celerite for GPs, you must change the second line from 
+Or, if you are not using celerite for GPs, you must change the second line from 
 ```#define celerite_compile 1```
 to 
 ```#define celerite_compile 0```
@@ -167,6 +167,8 @@ This file is read in by the C code and must be in the exact format as the exampl
 
 ### Forward Model (`lcout`) Output Files
 
+Note: Most of the output files append to existing files instead of overwriting to avoid accidental erasure. To make sure your files don't contain duplicate data sets, it is recommended you start from a clean directory or rename the run for each execution of `lcout` or `demcmc`. 
+
 1. Lightcurve file (lc_NAME.lcout), where NAME is the name specified in the input file.  
    
    This file lists the times of output and theoretical output as well as the measured flux and uncertainties. Useful for plotting the best fit.
@@ -234,7 +236,7 @@ Example data files, setup scripts, etc., are included in example_planets
 
 ## Analysis Tools
 
-Simple plotting and analysis tools written in Python 2 are available in `example_planets/analysis_tools`. These tools require the `numpy`, `pandas`, `matplotlib`, and `corner` packages.
+Simple plotting and analysis tools written in Python are available in `example_planets/analysis_tools`. These tools require the `numpy`, `pandas`, `matplotlib`, and `corner` packages.
 
 1. Forward Model Plotting
 
