@@ -69,7 +69,7 @@ except IOError:
   exit() 
 except Exception:
   print("The .in file was apparently parsed incorrectly, or your demcmc_NAME.out file has been corrupted.")
-  print("   The .in file parsing has obtained the following values:"
+  print("   The .in file parsing has obtained the following values:")
   print("   N planets = %i" % npl)
   print("   N non-planet parameters (5 stellar + jitter + GPs) = %i" % npar)
   print("   N total rows per parameter set in the demcmc_NAME.out file = %i" % nper)
