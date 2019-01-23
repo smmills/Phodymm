@@ -51,15 +51,15 @@ int ldlaw= 0
 // Restrict dilution from unresolved sources to be > 0.0 (1=yes, 0=no)
 int digt0= 1
 // Do you want to restrict inclination to > 90 rather than have bimodal distribution centered on 90 (0=no, 1=yes, 2=restrict to <90)
-int igt90= 2
+int igt90= 0
 // Do you want to impose a sin(i) prior on i to account for geometric effects (1=yes, 0=no)
 int incprior= 0
 // Restrict planet masses to positive values (1=yes, 0=no)
 int mgt0= 1
 // Do you want to use density cut offs. (1=yes, 0=no)
 // If yes, you must list the maximum allowed density (g/cm^3) you want for each planet, otherwise the line will be ignored (but must be present)
-int densitycuton= 0
-0 0 0
+int densitycuton= 1
+10 10 10
 // Do you wanto enforce a Gaussian mass ratio prior on the planets (1=yes, 2=no)
 // If yes, the following line specifies first the center of the prior for each planets, and the next the uncertainty (sigma) of the Gaussian
 // Thus each each line should have Nplanet entries, and both lines must be present even if a mass prior is not used (but will be ignored) 
@@ -139,7 +139,7 @@ double printepoch= 800.0
 // Are any planet initial conditions given in (x y z vx vy vz) or any other non-standard style rather than orbital elements, 0=no, 1=yes,Jacobian, 2=yes,Stellar-Centric, 3=yes,Barycentric, 4=mcmcout form, 5=aei not pt0, 6=mean/true anomaly
 int xyzflag= 0
 // Which planet inputs are in x y z vx vy vz style (1 indicates xyz, 0 indicates orbital elements)
-int xyzlist= 0 0 
+int xyzlist= 0 0 0
 // Initial guess at step size for planet parameters
 // Format: double pstep= P_step T0_step ecosomega_step esinomega_step inclination_step Omega_step mass_step rpors_step [brightness_step c1_step c2_step]
 double pstep= 1e-7      1e-7   1e-6    1e-6    1e-5    1e-5    1e-5    1e-5
