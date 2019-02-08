@@ -1714,7 +1714,9 @@ int getinput(char fname[]) {
 
   FILE *inputf = fopen(fname, "r"); 
   if (inputf == NULL) {
-    printf("Bad Input File Name");
+    printf("Error: Bad Input File Name\n");
+    printf("       Either no file was passed (see README for usage) or\n");
+    printf("       the specified file was not found in the run directory.\n");
     exit(0);
   }
 
@@ -1744,6 +1746,14 @@ int getinput(char fname[]) {
 #if (demcmc_compile == 1)
   if (NWALKERS <= 2) {
     printf("Error: At least 3 walkers are required for the DEMCMC algorithm to function\n");
+    exit(0);
+  }
+  int ncores;
+  MPI_Comm_size(MPI_COMM_WORLD, &ncores);
+  if ((NWALKERS % ncores) > 0) {
+    printf("ERROR: Nwalkers modulo Ncores must be 0.\n");
+    printf("       Nwalkers=%i, Ncores=%i\n", NWALKERS, ncores);
+    printf("       At least one of these must be changed.\n");
     exit(0);
   }
 #endif
@@ -4873,6 +4883,15 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
     int ncores;
     MPI_Comm_size(MPI_COMM_WORLD, &ncores);
     int npercore = nwalkers / ncores;
+    
+    //if ((nwalkers % ncores) > 0) {
+    //  //printf("WARNING: Nwalkers is not an integer multiple of ncores. This will reduce performance.\n");
+    //  //npercore += 1;
+    //  printf("ERROR: Nwalkers modulo Ncores must be 0.\n");
+    //  printf("       Nwalkers=%i, Ncores=%i\n", nwalkers, ncores);
+    //  printf("       At least one of these must be changed.\n");
+    //  exit(0);
+    //}
     //nwcore = (unsigned long) RANK;
     //printf("ncores %i nwalkers %i\n", ncores, nwalkers);
     
@@ -4881,7 +4900,7 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
     long nwfin=(nwcore+1)*npercore;
     // This loops allows you to have more walkers than cores
     for (nw=nwinit; nw < nwfin; nw++) {
-  
+
       memcpy(p0localcopy, &p0local[nw*pperwalker], pperwalker*sofd);
 
       acceptance[nw] = 1;
@@ -5064,9 +5083,17 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
       fclose(sout);
     }
 
-    MPI_Allgather(&p0local[nwinit*pperwalker], pperwalker*npercore, MPI_DOUBLE, p0global, pperwalker*npercore, MPI_DOUBLE, MPI_COMM_WORLD);
-    MPI_Gather(&acceptance[nwinit], 1*npercore, MPI_INT, acceptanceglobal, 1*npercore, MPI_INT, 0, MPI_COMM_WORLD); 
-    MPI_Gather(&neg2loglike0[nwinit], 1*npercore, MPI_DOUBLE, neg2loglike0global, 1*npercore, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    int nread;
+    if (nwfin-nwalkers > 0) {
+      nread = nwalkers-nwinit;
+      if (nread < 0) nread = 0;
+    } else {
+      nread = npercore;
+    }
+
+    MPI_Allgather(&p0local[nwinit*pperwalker], pperwalker*nread, MPI_DOUBLE, p0global, pperwalker*nread, MPI_DOUBLE, MPI_COMM_WORLD);
+    MPI_Gather(&acceptance[nwinit], 1*nread, MPI_INT, acceptanceglobal, 1*nread, MPI_INT, 0, MPI_COMM_WORLD); 
+    MPI_Gather(&neg2loglike0[nwinit], 1*nread, MPI_DOUBLE, neg2loglike0global, 1*nread, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
     memcpy(p0local, p0global, totalparams*sofd);
 

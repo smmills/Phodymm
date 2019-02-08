@@ -74,6 +74,7 @@ except Exception:
   print("   N non-planet parameters (5 stellar + jitter + GPs) = %i" % npar)
   print("   N total rows per parameter set in the demcmc_NAME.out file = %i" % nper)
   print("")
+  exit() 
 df2 = pd.read_csv(demcmcfile, sep='\t', header=None, skiprows=lambda x: (x % nper < npl or x % nper >= npl+npar), comment=';')
 
 
