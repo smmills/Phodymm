@@ -10,7 +10,7 @@ string outstr= koi142_2pl_gp
 // Number of bodies in the simulation (including all stars)
 int nbodies= 3
 // Epoch time of inputs
-double epoch= 800.0
+double epoch= 54.62702 
 // Number of individual demcmc walkers
 long nwalkers= 20
 // Number of generations the demcmc will run (i.e. the number of steps per walker)
