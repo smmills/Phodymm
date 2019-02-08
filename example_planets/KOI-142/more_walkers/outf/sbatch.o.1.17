@@ -1,0 +1,29 @@
+[1,17]<stdout>:cadenceswitch = 2
+[1,17]<stdout>:pperplan=8
+[1,17]<stdout>:rvjitterflag, NstarsRV, Ntelescopes =  1, 1, 2
+[1,17]<stdout>:celerite=0
+[1,17]<stdout>:RVcelerite=0
+[1,17]<stdout>:pstar=7
+[1,17]<stdout>:spectroscopy = 1, 0.998000, 0.030000, 0.030000
+[1,17]<stdout>:MASS spectroscopy = 1, 0.921000, 0.013000, 0.013000
+[1,17]<stdout>:LDLAW = 0
+[1,17]<stdout>:sqrte, ecuton, eprior[0], esigma = 1, 1, -1775831016, 0.050000
+[1,17]<stdout>:bimodf = 0
+[1,17]<stdout>:t0 = 50.000000
+[1,17]<stdout>:t1 = 3520.000000
+[1,17]<stdout>:10.916594
+[1,17]<stdout>:22.264337
+[1,17]<stdout>:1438.563870
+[1,17]<stdout>:./kplr005446285_1440_2.txt
+[1,17]<stdout>:
+[1,17]<stdout>:./kplr005446285_1440_2.txt read
+[1,17]<stdout>:pre RV
+[1,17]<stdout>:0, 1
+[1,17]<stdout>:1, 0
+[1,17]<stdout>:2, 0
+[1,17]<stdout>:3, 0
+[1,17]<stdout>:vv=51
+[1,17]<stdout>:Initializing Walkers
+[1,17]<stdout>:Initialized Walkers
+[1,17]<stdout>:Setup Complete
+[1,17]<stdout>:Beginning DEMCMC (this may take a very long time)
