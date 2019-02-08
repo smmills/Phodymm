@@ -225,7 +225,7 @@ Note: Most of the output files append to existing files instead of overwriting t
 
 4. Diagnostic Output
 
-   Some diagnostic output is saved in `demcmc.stdout` and/or the `outf` subdirectory, depending on how the run is executed. 
+   Some diagnostic output is saved in `demcmc.stdout` and/or the `outf` subdirectory, depending on how the run is executed. If the run crashes or hangs, these are the best places to look for help.  
  
 
 
