@@ -252,21 +252,25 @@ Simple plotting and analysis tools written in Python are available in `example_p
 
 2. DEMCMC Analysis
 
-   `demcmc_quick_analyze.py` is a python script to perform some standard analysis of the output of a demcmc run. It should be copied to the directory where a demcmc_RUNNAME.out file was created, and should be invoked with:
-   ```
-   $ python demcmc_quick_analyze.py INFILE.in [burnin]
-   ``` 
-   where INFILE.in is the name of the .in input file for the run and burnin is an optional parameter which can be set to an integer N to disregard the first N steps when computing posterior information. Running this script produces a new directory called analysis_dir which is populated with:
-   
-   * Trace plots for each parameter (format=.png)
-   * Corner correlation plots for all parameters (format=.png)
-   * 1- & 3-sigma confidence intervals for each parameter (format=.txt). These use the median and [.16, .84] and [.0015, .9985] percentiles. 
-   * 2-sigma upper limits for each parameter, i.e., the value which 95% of draws lie below (format=.txt). This is useful for understanding the upper bound on paramters like mass, but may be meaningless for other parameters which are more well-defined. 
-   * Corner correlation plots for the masses and eccentricities (transformed out of the fitting basis) for each planet (format=.png)
-   * 1-d posteriors of all planets m mass, radius, and densities marginalized over all other parameters (format=.png)
-   * Gelman-Rubin Rhat statistics for gauging MCMC convergence for each parameter (format=.txt)
+   * `demcmc_quick_analyze.py` is a python script to perform some standard analysis of the output of a demcmc run. It should be copied to the directory where a demcmc_RUNNAME.out file was created, and should be invoked with:
+      ```
+      $ python demcmc_quick_analyze.py INFILE.in [burnin]
+      ``` 
+      where INFILE.in is the name of the .in input file for the run and burnin is an optional parameter which can be set to an integer N to disregard the first N steps when computing posterior information. Running this script produces a new directory called analysis_dir which is populated with:
+      
+      * Trace plots for each parameter (format=.png)
+      * Corner correlation plots for all parameters (format=.png)
+      * 1- & 3-sigma confidence intervals for each parameter (format=.txt). These use the median and [.16, .84] and [.0015, .9985] percentiles. 
+      * 2-sigma upper limits for each parameter, i.e., the value which 95% of draws lie below (format=.txt). This is useful for understanding the upper bound on paramters like mass, but may be meaningless for other parameters which are more well-defined. 
+      * Corner correlation plots for the masses and eccentricities (transformed out of the fitting basis) for each planet (format=.png)
+      * 1-d posteriors of all planets m mass, radius, and densities marginalized over all other parameters (format=.png)
+      * Gelman-Rubin Rhat statistics for gauging MCMC convergence for each parameter (format=.txt)
 
-  
+   * `make_ttv_posterior_cloud.sh` is a bash script to help visualize a TTV posterior from the output of a demcmc run. It should be copied to the directory where a demcmc_RUNNAME.out file was created, and should be invoked with:
+      ```
+      $ ./make_ttv_posterior_cloud.sh INFILE.in 
+      ```
+      It may be necessary to `chmod +x ./make_ttv_posterior_cloud.sh` and/or change the first line of the script which specifies the location of bash for the script to run properly. It will create a subdirectory structure where individual draws from the posterior are made, modeled, and their TTV output analyzed. The resulting figures can be found in `./cloudttv_dir/posterior_draws` and are called `tbv_XX.out.pdf`. These are plots of the TTVs drawn from the posteriors (gray circles), and their mean and standard deviation (blue). A few tunable parameters are listed at the head of the `make_ttv_posterior_cloud.sh` script.
 
 
 
