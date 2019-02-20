@@ -161,11 +161,11 @@ This file is read in by the C code and must be in the exact format as the exampl
 
 5. [Optional, `demcmc` only] Restart Files
 
-   If a demcmc run is stopped it may be resumed from the last recored generation by passing `demcmc` additional arguments that specify the location of "restart files." These files include the current state of the MCMC chain, current MCMC scaling factor, and the best-fit solution found so far. These files can be generated from the ends of the MCMC output files #1-3 as described below. An example script to automatically generate them correctly is included in `example_planets/restart_script/restart.sh`. It should be copied to the directory where the MCMC was run, and then invoked with 
-```
-./restart.sh demcmc_runscript.sh NAME.in
-``` 
-and then the MCMC may be restarted by running the generated `demcmc_runscript.sh.res.sh` file. 
+   If a demcmc run is stopped it may be resumed from the last recorded generation by passing `demcmc` additional arguments that specify the location of "restart files." These files include the current state of the MCMC chain, current MCMC scaling factor, and the best-fit solution found so far. These files can be generated from the ends of the MCMC output files #1-3 as described below. An example script to automatically generate them correctly is included in `example_planets/restart_script/restart.sh`. It should be copied to the directory where the MCMC was run, and then invoked with 
+   ```
+   ./restart.sh demcmc_runscript.sh NAME.in
+   ``` 
+   and then the MCMC may be restarted by running the generated `demcmc_runscript.sh.res.sh` file. 
    
 
 
