@@ -7,13 +7,10 @@
 [1,12]<stdout>:spectroscopy = 1, 0.998000, 0.030000, 0.030000
 [1,12]<stdout>:MASS spectroscopy = 1, 0.921000, 0.013000, 0.013000
 [1,12]<stdout>:LDLAW = 0
-[1,12]<stdout>:sqrte, ecuton, eprior[0], esigma = 1, 1, -1358334024, 0.050000
+[1,12]<stdout>:sqrte, ecuton, eprior[0], esigma = 1, 1, -826820632, 0.050000
 [1,12]<stdout>:bimodf = 0
 [1,12]<stdout>:t0 = 50.000000
 [1,12]<stdout>:t1 = 3520.000000
-[1,12]<stdout>:10.916594
-[1,12]<stdout>:22.264337
-[1,12]<stdout>:1438.563870
 [1,12]<stdout>:./kplr005446285_1440_2.txt
 [1,12]<stdout>:
 [1,12]<stdout>:./kplr005446285_1440_2.txt read
@@ -23,7 +20,11 @@
 [1,12]<stdout>:2, 0
 [1,12]<stdout>:3, 0
 [1,12]<stdout>:vv=51
-[1,12]<stdout>:Initializing Walkers
+[1,12]<stdout>:Read in Restart pldin
+[1,12]<stdout>:Read in Restart gamma
+[1,12]<stdout>:Read in Restart best chi sq
+[1,12]<stdout>:neg2loglikemin=0.000000
+[1,12]<stdout>:gamma=0.076404
 [1,12]<stdout>:Initialized Walkers
 [1,12]<stdout>:Setup Complete
 [1,12]<stdout>:Beginning DEMCMC (this may take a very long time)
