@@ -45,7 +45,7 @@ To select which model to run in the demcmc, uncomment the appropriate model in d
 
 This will generate the file with the state of the MCMC chain every 100 generations which can be used for generating posteriors, as well as several other output files as described in README.md MCMC Fit Output Files section.  
 
-To restart a DEMCMC that has been stopped or crashed, the helper script `restart.sh` is included. After a DEMCMC is run for at least 100 generations (generating all necessary output files) running:
+To restart a DEMCMC that has been stopped or crashed, the helper script `restart.sh` is included in the `example_planets/restart_script` directory. After a DEMCMC is run for at least 100 generations (generating all necessary output files) copy it here and run:
 $ ./restart.sh demcmc_runscript.sh koi142_MODELNAME.in 
 or
 $ ./restart.sh demcmc_runscript.sh koi142_MODELNAME.in koi142_rvs.txt
