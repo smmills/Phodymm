@@ -1,0 +1,30 @@
+[1,3]<stdout>:cadenceswitch = 2
+[1,3]<stdout>:pperplan=8
+[1,3]<stdout>:rvjitterflag, NstarsRV, Ntelescopes =  1, 1, 2
+[1,3]<stdout>:celerite=0
+[1,3]<stdout>:RVcelerite=0
+[1,3]<stdout>:pstar=7
+[1,3]<stdout>:spectroscopy = 1, 0.998000, 0.030000, 0.030000
+[1,3]<stdout>:MASS spectroscopy = 1, 0.921000, 0.013000, 0.013000
+[1,3]<stdout>:LDLAW = 0
+[1,3]<stdout>:sqrte, ecuton, eprior[0], esigma = 1, 1, -981338136, 0.050000
+[1,3]<stdout>:bimodf = 0
+[1,3]<stdout>:t0 = 50.000000
+[1,3]<stdout>:t1 = 3520.000000
+[1,3]<stdout>:./kplr005446285_1440_2.txt
+[1,3]<stdout>:
+[1,3]<stdout>:./kplr005446285_1440_2.txt read
+[1,3]<stdout>:pre RV
+[1,3]<stdout>:0, 1
+[1,3]<stdout>:1, 0
+[1,3]<stdout>:2, 0
+[1,3]<stdout>:3, 0
+[1,3]<stdout>:vv=51
+[1,3]<stdout>:Read in Restart pldin
+[1,3]<stdout>:Read in Restart gamma
+[1,3]<stdout>:Read in Restart best chi sq
+[1,3]<stdout>:neg2loglikemin=0.000000
+[1,3]<stdout>:gamma=0.059596
+[1,3]<stdout>:Initialized Walkers
+[1,3]<stdout>:Setup Complete
+[1,3]<stdout>:Beginning DEMCMC (this may take a very long time)
