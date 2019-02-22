@@ -3,7 +3,7 @@
 ## usage:$ ./restart.sh demcmc.sbatch kid009632895.in [rv1.txt] [rv2.txt]
 ##       $ sbatch demcmc.sbatch.res
 
-NSTARPAR=5
+NSTARPAR=7
 
 SBATCHF=$1
 INFILE=$2
