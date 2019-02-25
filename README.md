@@ -47,7 +47,7 @@ Then recompile with
 ```
 $ mpic++ -w -Ofast -o demcmc -I/yourpathto/celerite/celerite/cpp/include -I/yourpathto/celerite/celerite/cpp/lib/eigen_3.3.3 -lm -lgsl -lgslcblas -lmpi -fpermissive phodymm.cpp
 ```
-or, if you are not using celerite for on line 2 set:
+or, if you are not using celerite, on line 2 set:
 ```#define celerite_compile 0```
 and then compile with:
 ```
@@ -146,6 +146,12 @@ This file is read in by the C code and must be in the exact format as the exampl
    [Planet Label] \t  [a (AU)] \t [e] \t [i (deg)] \t [Omega (deg)] \t [omega(deg)] \t [angle (deg)] \t [Mass] \t [Rp/Rstar]
    ```
    where angle is the true anomaly for xyzflag= 5, and the mean anomaly for xyzflag= 6. 
+   
+   Finally, setting xyzflag= 4, means the input is assumed to be in the DEMCMC parameters format, typically:
+   ```
+   [Planet Label] \t  [period (d)] \t [T0 (d)] \t [sqrt(e)\*cos(omega)] \t [sqrt(e)\*sin(omega)] \t [i (deg)] \t [Omega (deg)] \t [Mass] \t [Rp/Rstar]
+   ```
+   although this may vary depending on your setup in the .in file. 
 
 
 4. [Optional] Radial Velocity Dataset
@@ -156,7 +162,7 @@ This file is read in by the C code and must be in the exact format as the exampl
    ```
    The time series must have the same 0 point as the flux time. The telescope number is an integer index starting from 0 indentify each unique telescope used for observations. This information is used to determine different constant RV offsets for different telescopes, and allows for different RV jitters for different telescopes. 
 
-   See `example_planets/?` for example RV data usage. 
+   See `example_planets/Kepler-15` or `example_planets/Kepler-18` for example RV data usage. 
 
 
 5. [Optional, `demcmc` only] Restart Files
