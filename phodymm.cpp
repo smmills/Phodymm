@@ -1,5 +1,5 @@
 #define demcmc_compile 0
-#define celerite_compile 1
+#define celerite_compile 0
 
 // To compile lcout:
 // make sure demcmc_compile is defined as 0
@@ -294,6 +294,7 @@ int func (double t, const double y[], double f[], void *params) {
 
 // We don't use the Jacobian, but still need to define a pointer for gsl
 void *jac;
+
 
 
 
@@ -622,298 +623,6 @@ double celerite_fit(double*** flux_rvs, double* p0local, int i, int rvflag, int 
 #endif
  
 
-
-
-
-// Helper for checking if certain parameters are out of 
-int check_boundaries( double *p0local, long nw) {
-  
-  int notallowed = 0;
-  const int npl = NPL;
-  const int pperwalker = PPERWALKER;
-  const int pperplan = PPERPLAN;
-  const int sofd = SOFD;
-  int ip;
-
-
- 
-  for (ip=0; ip<npl; ip++) { 
-    // make sure i and Omega angles are not cycling through:
-    if ( p0local[nw*pperwalker+ip*pperplan+4] < 0.0 || p0local[nw*pperwalker+ip*pperplan+4] > 180.0 ) notallowed=1;
-    if ( p0local[nw*pperwalker+ip*pperplan+5] < -180.0 || p0local[nw*pperwalker+ip*pperplan+5] > 180.0 ) notallowed=1;
-    // make sure i>=90
-    if ( IGT90 && (p0local[nw*pperwalker+ip*pperplan+4] < 90.0) ) notallowed=1;
-    // make sure m>=0
-    if ( MGT0 && (p0local[nw*pperwalker+ip*pperplan+6] < 0.0) ) notallowed=1;
-    //make sure density is allowed
-    if (DENSITYCUTON) {
-      double massg = p0local[nw*pperwalker+ip*pperplan+6] / MSOMJ * MSUNGRAMS; 
-      double radcm = p0local[nw*pperwalker+npl*pperplan+1] * p0local[nw*pperwalker+ip*pperplan+7] * RSUNCM;
-      double rhogcc = massg / (4./3.*M_PI*radcm*radcm*radcm);
-      if (rhogcc > MAXDENSITY[ip]) notallowed=1;
-    }
-    // make sure radius ratios are positive
-    if (p0local[nw*pperwalker+ip*pperplan+7] < 0.0) notallowed=1;
-  }
-
-  if ( DIGT0 && (p0local[nw*pperwalker+npl*pperplan+4] < 0.0) ) notallowed=1;
-
-  // check that RVJITTER >= 0
-  if (RVS) {
-    if (RVJITTERFLAG) {
-      int ki;
-      for (ki=0; ki<RVJITTERTOT; ki++) {
-        if (p0local[nw*pperwalker+npl*pperplan+(5+ki)] < 0.0) {
-          notallowed=1;
-        }
-      }
-    }
-  }
-  
-  // check that celerite terms >= 0
-  if (CELERITE) {
-      int ki;
-      for (ki=0; ki<NCELERITE; ki++) {
-        if (p0local[nw*pperwalker+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+ki] < 0.0) {
-          notallowed=1;
-        }
-      }
-  }
-  if (RVCELERITE) {
-      int ki;
-      for (ki=0; ki<NRVCELERITE; ki++) {
-        if (p0local[nw*pperwalker+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+CELERITE*4+ki] < 0.0) {
-          notallowed=1;
-        }
-      }
-  }
-  
-  double* evector = malloc(npl*sofd);
-  if (ECUTON) {
-    if (SQRTE) {
-      int i0;
-      for (i0=0; i0<npl; i0++) {
-        evector[i0] = pow(sqrt( pow(p0local[nw*pperwalker+i0*pperplan+2], 2) + pow(p0local[nw*pperwalker+i0*pperplan+3], 2) ), 2);
-      }
-    } else {
-      int i0;
-      for (i0=0; i0<npl; i0++) {
-        evector[i0] = sqrt( pow(p0local[nw*pperwalker+i0*pperplan+2], 2) + pow(p0local[nw*pperwalker+i0*pperplan+3], 2) );
-      }
-    }
-    // make sure e_d cos  w_d is within its range
-    double* emax = EMAX;
-    int i0;
-    for (i0=0; i0<npl; i0++) {
-      if (evector[i0] > emax[i0] ) notallowed=1;
-    }
-  }
-  
-  //make sure ld coefficients in range
-  if ( DILUTERANGE && (p0local[nw*pperwalker+npl*pperplan+2] < 0.0 || p0local[nw*pperwalker+npl*pperplan+2] > 1.0 || p0local[nw*pperwalker+npl*pperplan+3] < 0.0 || p0local[nw*pperwalker+npl*pperplan+3] > 1.0) ) notallowed=1;
- 
-  free(evector);
- 
-  return notallowed;
-}
-
-
-
-// Helper for computing the priors
-double compute_priors(double *p0local, int i) {
-
-    double xisqtemp = 0.;
-    const int pperwalker = PPERWALKER;
-    const int pperplan = PPERPLAN;
-    const int sofd = SOFD;
-    const int npl = NPL;
-
-    double photoradius;
-    photoradius = p0local[i*pperwalker+npl*pperplan+1]; 
-    double photomass;
-    photomass = p0local[i*pperwalker+npl*pperplan+0]; 
-    double* evector; 
-    evector = malloc(npl*sofd);
-
-    if (EPRIOR) {
-      if (SQRTE) {
-        int i0;
-        for (i0=0; i0<npl; i0++) {
-          evector[i0] = pow(sqrt( pow(p0local[i*pperwalker+i0*pperplan+2], 2) + pow(p0local[i*pperwalker+i0*pperplan+3], 2) ), 2);
-        }
-      } else {
-        int i0;
-        for (i0=0; i0<npl; i0++) {
-          evector[i0] = sqrt( pow(p0local[i*pperwalker+i0*pperplan+2], 2) + pow(p0local[i*pperwalker+i0*pperplan+3], 2) );
-        }
-      }
-      int i0;
-      for (i0=0; i0<NPL; i0++) {
-        if (EPRIORV[i0]) {
-          double priorprob;
-          if (EPRIOR==1) {
-            priorprob = rayleighpdf(evector[i0]);
-          } else if (EPRIOR==2) {
-            priorprob = normalpdf(evector[i0]);
-          }
-          xisqtemp += -2.0*log( priorprob );
-        }
-      }
-    }
-
-    if (SPECTROSCOPY) {
-      if (photoradius > SPECRADIUS) xisqtemp += pow( (photoradius - SPECRADIUS) / SPECERRPOS, 2 );
-      else xisqtemp += pow( (photoradius - SPECRADIUS) / SPECERRNEG, 2 );
-    }
-
-    if (MASSSPECTROSCOPY) {
-      if (photomass > SPECMASS) xisqtemp += pow( (photomass - SPECMASS) / MASSSPECERRPOS, 2 );
-      else xisqtemp += pow( (photomass - SPECMASS) / MASSSPECERRNEG, 2 );
-    }
-
-    if (INCPRIOR) {
-      int i0;
-      for (i0=0; i0<npl; i0++) {
-        xisqtemp += -2.0*log( sin(p0local[i*pperwalker+i0*pperplan+4] *M_PI/180.) ); 
-      }
-    }
-
-  free(evector);
-
-  return xisqtemp;
-
-}
-
-
-
-// Wrapper for computing a celerite fit and returning the effective chi^2
-double celerite_fit(double*** flux_rvs, double* p0local, int i, int rvflag, int verbose)  { 
-
-  const int npl = NPL;
-  const int pperplan = PPERPLAN;
-  const int pperwalker = PPERWALKER;
-  const int sofd = SOFD;
-
-  double xisq;  
-
-  double *xs = flux_rvs[rvflag][0];
-  long maxil = (long) xs[0];
-  double *trueys = flux_rvs[rvflag][1];
-  double *modelys = flux_rvs[rvflag][2];
-  double *es = flux_rvs[rvflag][3];
-  double *diffys = malloc(sofd*maxil);
-  int il;
-  for (il=0; il<maxil; il++) { 
-    diffys[il] = trueys[il+1]-modelys[il+1];
-  }
-  double *yvarp = malloc(sofd*maxil);
-  for (il=0; il<maxil; il++) { 
-    yvarp[il] = es[il+1]*es[il+1]; 
-  }
-  double *xp = &xs[1]; 
-  
-  int j_real = 0;
-  int j_complex;
-  double jitter, k1, k2, k3, S0, w0, Q;
-  jitter = p0local[pperwalker*i+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE*rvflag+0];
-  S0 = p0local[pperwalker*i+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE*rvflag+1];
-  w0 = p0local[pperwalker*i+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE*rvflag+2];
-  Q = p0local[pperwalker*i+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE*rvflag+3];
-  if (Q >= 0.5) {
-    j_complex = 1;
-  } else {
-    j_complex = 2;
-  }
-  VectorXd a_real(j_real),
-          c_real(j_real),
-          a_comp(j_complex),
-          b_comp(j_complex),
-          c_comp(j_complex),
-          d_comp(j_complex);
-  if (Q >= 0.5) {
-    k1 = S0*w0*Q;
-    k2 = sqrt(4.*Q*Q - 1.);
-    k3 = w0/(2.*Q);
-    a_comp << k1;
-    b_comp << k1/k2;
-    c_comp << k3;
-    d_comp << k3*k2;
-  } else {
-    j_complex = 2;
-    k1 = 0.5*S0*w0*Q;
-    k2 = sqrt(1. - 4.*Q*Q);
-    k3 = w0/(2.*Q);
-    a_comp << k1*(1. + 1./k2), k1*(1. - 1./k2);
-    b_comp << 0., 0.;
-    c_comp << k3*(1. - k2), k3*(1. + k2);
-    d_comp << 0., 0.;
-  }
-  
-  if (verbose) {  
-    printf("%lf %lf %lf %lf\n", a_comp[0], b_comp[0], c_comp[0], d_comp[0]);
-  }
-
-  VectorXd x = VectorXd::Map(xp, maxil);
-  VectorXd yvar = VectorXd::Map(yvarp, maxil);
-  VectorXd dy = VectorXd::Map(diffys, maxil);
-  
-  celerite::solver::CholeskySolver<double> solver;
-  solver.compute(
-        jitter,
-        a_real, c_real,
-        a_comp, b_comp, c_comp, d_comp,
-        x, yvar  // Note: this is the measurement _variance_
-    );
-  
-  // see l.186-192 in celerite.py
-  double logdet, diffs, llike;
-  logdet = solver.log_determinant();
-  diffs = solver.dot_solve(dy); 
-  llike = -0.5 * (diffs + logdet); 
-  
-  xisq = diffs+logdet;
-  
-  if (verbose) { 
-    printf("Celerite params:\n");
-    printf("a+comp=%25.17lf\n", a_comp[0]);
-    printf("b+comp=%25.17lf\n", b_comp[0]);
-    printf("c+comp=%25.17lf\n", c_comp[0]);
-    printf("d+comp=%25.17lf\n", d_comp[0]);
-    printf("diffs=%lf\n", diffs);
-    printf("logdet=%lf\n", logdet);
-    printf("llike=%lf\n", llike);
-  
-    VectorXd prediction = solver.predict(dy, x);
- 
-    char tmtefstr[1000];
-    char str1;
-    if (rvflag) {
-      str1 = "rv";
-    } else {
-      str1 = "lc"; 
-    }
-    strcpy(tmtefstr, str1);
-    strcpy(tmtefstr, "_");
-    strcat(tmtefstr, OUTSTR);
-    strcat(tmtefstr, ".gp_");
-    strcat(tmtefstr, str1);
-    strcat(tmtefstr, "out");
-    FILE *tmtef;
-    tmtef = fopen(tmtefstr, "a");
-    long ijk;
-    for (ijk=0; ijk<maxil; ijk++) {
-      fprintf(tmtef, "%.12lf \n", prediction[ijk]);
-    }
-    fclose(tmtef);// = openf(tmtstr,"w");
-  }
-
-  free(yvarp);
-  free(diffys);
-
-  return xisq;
-
-}
- 
 
 
 
@@ -1996,6 +1705,2110 @@ double ***dpintegrator_single (double ***int_in, double **tfe, double **tve, dou
 
 }
 
+
+// Compute transit lightcurve for case of more than 1 luminous body 
+double ***dpintegrator_multi(double ***int_in, double **tfe, double **tve, int *cadencelist) {
+
+  int nbodies = NBODIES;
+  int cadenceswitch = CADENCESWITCH;
+  double t0 = T0;
+  double t1 = T1;
+  int nperbin = NPERBIN;
+  double binwidth = BINWIDTH;
+  const int posstrans = NBODIES;
+  double offsetmult = OFFSETMULT;
+  double offsetmin = OFFSETMIN;
+  double offsetminout = OFFSETMINOUT;
+  double dist2divisor = DIST2DIVISOR;
+  const int sofd = SOFD;
+  const int sofds = SOFDS;
+  const int sofi = SOFI;
+  const int sofis = SOFIS;
+
+  int nplplus1 = int_in[0][0][0];
+  const int npl = nplplus1-1;
+  double tstart = int_in[1][0][0]; //epoch
+  double rstar = int_in[3][0][0];
+  double dilute = int_in[3][0][1];
+
+  long kk = (long) tfe[0][0];
+  double *timelist;
+  long *order;
+  double *timelist_orig = &tfe[0][1];
+
+  long kkorig = kk;
+  int nb;
+  if (cadenceswitch == 1 ) {
+    timelist = malloc(kk*nperbin*sofd);
+    long q;
+    for (q=0; q<kk; q++) {
+      double tcenter = timelist_orig[q];
+      for (nb=0; nb<nperbin; nb++) {
+        timelist[q*nperbin+nb] = tcenter + (binwidth/nperbin)*(nb+0.5) - binwidth*0.5;
+      }
+    }
+    kk *= nperbin;
+  } else if (cadenceswitch == 0) {
+    timelist = timelist_orig;
+  } else if (cadenceswitch == 2) {
+    timelist = malloc(kk*nperbin*sofd);
+    order = malloc(kk*nperbin*sizeof(long));
+    long lccount=0;
+    long sccount=0;
+    long q;
+    for (q=0; q<kk; q++) {
+      if (cadencelist[q] == 1) {
+        double tcenter = timelist_orig[q];
+        for (nb=0; nb<nperbin; nb++) {
+          timelist[sccount+lccount*nperbin+nb] = tcenter + (binwidth/nperbin)*(nb+0.5) - binwidth*0.5;
+          order[sccount+lccount*nperbin+nb] = q;
+        }
+        lccount++;
+      } else {
+        timelist[sccount+lccount*nperbin] = timelist_orig[q];
+        order[sccount+lccount*nperbin] = q;
+        sccount++;
+      }
+    }
+    kk = sccount + lccount*nperbin; 
+
+
+    if (OOO == 2) {
+      OOO = 0;
+      for (q=0; q<kk-1; q++) {
+        if (timelist[q+1] < timelist[q]) {
+          OOO = 1;
+          break;
+        }
+      }
+    }
+
+    if (OOO) { 
+      double *tclist = malloc((2*sofd)*kk); 
+      for (q=0; q<kk; q++) {
+        tclist[2*q] = timelist[q];
+        tclist[2*q+1] = (double) order[q];
+      }
+      qsort(tclist, kk, sofd*2, compare);
+      for (q=0; q<kk; q++) {
+        timelist[q] = tclist[2*q];
+        order[q] = (long) tclist[2*q+1];
+      }
+      free(tclist);
+    }
+
+  } else {
+    printf("cadenceswitch err\n");
+    exit(0);
+  }
+ 
+
+  // Set up integrator
+  const gsl_odeiv_step_type * T 
+  /*   = gsl_odeiv_step_bsimp;   14 s */
+  = gsl_odeiv_step_rk8pd;      /* 3 s */
+  /*  = gsl_odeiv_step_rkf45;    14 s */
+  /*  = gsl_odeiv_step_rk4;      26 s */
+
+  gsl_odeiv_step * s 
+    = gsl_odeiv_step_alloc (T, 6*npl);
+  gsl_odeiv_control * c 
+    = gsl_odeiv_control_y_new (DY, 0.0);
+  gsl_odeiv_evolve * e 
+    = gsl_odeiv_evolve_alloc (6*npl);
+  
+  long i;
+  double mu[npl+1];
+  double npl_mu[npl+2];
+  gsl_odeiv_system sys = {func, jac, 6*npl, npl_mu};
+
+
+  double t; /* this is the given epoch. */
+  double hhere;  
+  double y[6*npl], yin[6*npl];
+  //note:rad is in units of rp/rstar
+  double *rad = malloc(npl*sofd);
+  double brightness[npl+1];
+  double c1list[npl+1];
+  double c2list[npl+1];
+
+  mu[0] = int_in[2][0][0]; 
+  brightness[0] = int_in[2][0][8];
+  c1list[0] = int_in[2][0][9];
+  c2list[0] = int_in[2][0][10]; 
+
+  for (i=0; i<npl; i++) {
+    mu[i+1] = int_in[2][i+1][0];
+    yin[i*6+0] = int_in[2][i+1][1];
+    yin[i*6+1] = int_in[2][i+1][2];
+    yin[i*6+2] = int_in[2][i+1][3];
+    yin[i*6+3] = int_in[2][i+1][4];
+    yin[i*6+4] = int_in[2][i+1][5];
+    yin[i*6+5] = int_in[2][i+1][6];
+    rad[i] = int_in[2][i+1][7];  
+    brightness[i+1] = int_in[2][i+1][8];
+    c1list[i+1] = int_in[2][i+1][9];
+    c2list[i+1] = int_in[2][i+1][10];
+  }
+
+  memcpy(&npl_mu[1], mu, (npl+1)*sofd);
+  npl_mu[0] = npl;
+
+  double mtot=mu[0];
+  for(i=0;i<npl;i++) mtot += mu[i+1];
+
+  double yhone[6*npl], dydt[6*npl], yerrhone[6*npl];
+  double yhone0[6*npl];
+  double thone,tstep,dist,vtrans;
+  double vstar,astar;
+
+  int k;
+  int brights=0;
+  int *brightsindex = malloc((npl+1)*sofi);
+  for (k=0; k<npl+1; k++) {
+    if (brightness[k] > 0) {
+      brightsindex[brights] = k;
+      brights++;
+    }
+  }
+
+  double **fluxlist = malloc(brights*sofds);
+  for (k=0; k<brights; k++) {
+    fluxlist[k] = malloc(kk*sofd);
+  }
+  double *netflux = malloc((kk+1)*sofd);
+  double **tmte = malloc(4*sofds);
+
+  tmte[0] = &tfe[0][0];
+  tmte[1] = &tfe[1][0]; // measured flux list;
+  tmte[3] = &tfe[2][0]; // error list;
+
+  int **transitcount = malloc(brights*sofis);
+  for (k=0; k<brights; k++) {
+    transitcount[k] = malloc((npl+1)*sofi);
+    for (i=0; i<(npl+1); i++) {
+      transitcount[k][i] = -1;
+    }
+  }
+
+  int pl;
+  int **numplanets = malloc(brights*sofis);
+  for (k=0; k<brights; k++) {
+    numplanets[k] = calloc(kk, sofi);
+  }
+  int ***whereplanets = malloc(brights*sizeof(int**));
+  for (k=0; k<brights; k++) {
+    whereplanets[k] = malloc(kk*sofis);
+    long kkc;
+    for (kkc=0; kkc<kk; kkc++) {
+      whereplanets[k][kkc] = calloc(nbodies, sofi);
+    }
+  }
+
+  double ****tranarray = malloc(brights*sizeof(double***));
+  for (k=0; k<brights; k++) {
+    tranarray[k] = malloc(kk*sizeof(double**));
+    long kkc;
+    for (kkc=0; kkc<kk; kkc++) {
+      tranarray[k][kkc] = malloc(posstrans*sofds);
+      long kkcc;
+      for (kkcc=0; kkcc<posstrans; kkcc++) {
+        tranarray[k][kkc][kkcc] = malloc(3*sofd);
+      }
+    }
+  }
+
+ 
+  // set up directories for output if we are just doing a single run 
+#if ( demcmc_compile == 0 ) 
+  FILE ***directory = malloc(brights*sizeof(FILE**));
+  for (k=0; k<brights; k++) {
+    directory[k] = malloc((npl+1)*sizeof(FILE*));
+  }
+  for (k=0; k<brights; k++) {
+    int k1 = brightsindex[k];
+    for (i=0; i<(npl+1); i++) {
+      if (i != k1) {
+        char str[30];
+        sprintf(str, "tbv%02i_%02i.out", k1, i);
+        directory[k][i]=fopen(str,"w");
+      }
+    }
+  }
+#endif
+
+
+  /* Setup forward integration */
+  double ps2, dist2;  /* ps2 = projected separation squared. */
+  t = tstart;
+  double h = HStart;
+  long maxtransits = 10000;  //total transits per planet
+  int ntarrelem = 6;
+  double **transitarr = malloc(brights*sofds);
+  for (k=0; k<brights; k++) {
+    transitarr[k] = malloc((maxtransits+1)*ntarrelem*sofd);
+  }
+  if (transitarr[brights-1] == NULL) {
+      printf("Allocation Error\n");
+      exit(0);
+  }
+  long *ntransits = calloc(brights, sizeof(long));
+
+  seteq(npl, y, yin);
+  double **dp = malloc(brights*sofds);
+  double **dpold = malloc(brights*sofds);
+  double ddpdt;
+  for (i=0; i<brights; i++) {
+      dp[i] = malloc(npl*sofd);
+      dpold[i] = malloc(npl*sofd);
+  }
+  for(pl=0; pl<npl; pl++) dp[0][pl]=y[0+pl*6]*y[3+pl*6]+y[1+pl*6]*y[4+pl*6];
+  for (i=1; i<brights; i++) {
+      for(pl=0; pl<npl; pl++) {
+          dp[i][pl]=(y[0+pl*6]-y[0+(i-1)*6])*y[3+pl*6] + (y[1+pl*6]-y[1+(i-1)*6])*y[4+pl*6];
+      }
+  }
+
+  long vv = 0;
+  // This messes up reduced chi squared if your rv values are outside of the integration time!!!  
+  // But we are only comparing relative chi squareds
+  // Plus just don't include rv times that aren't within your integration bounds, because that's silly
+  double *rvarr;
+  double *rvtarr;
+  int onrv = 0;
+  int rvcount, startrvcount; 
+  if (RVS) {
+    vv = (long) tve[0][0];
+    rvarr = calloc(vv+1, sofd);
+    rvarr[0] = (double) vv;
+    rvtarr = malloc((vv+2)*sofd);
+    rvtarr[0] = -HUGE_VAL;
+    rvtarr[vv+1] = HUGE_VAL;
+    memcpy(&rvtarr[1], &tve[0][1], vv*sofd);
+    startrvcount = 1;
+    while (rvtarr[startrvcount] < tstart) startrvcount+=1;
+    rvcount = startrvcount;
+  }
+
+
+  double eps=1e-10;
+  double yhonedt[6*npl];
+  double dydtdt[6*npl];
+  double thonedt;
+  double dt;
+  double baryz, baryz2;
+  double zb, zb2;
+  double zp, zs;
+  double dt1, dt2;
+  double t2;
+  double baryc[6*npl];
+  double baryc2[6*npl];
+  double dbarycdt[6*npl];
+  double dbarycdt2[6*npl];
+  double starimage[6*npl];
+  double dstarimagedt[6*npl];
+  int ii;
+  int j;
+
+  // Integrate forward from epoch
+  while (t < t1 ) {      
+
+    if (RVS) {
+      onrv=0;
+      if (h + t > rvtarr[rvcount]) {  
+        onrv = 1;
+        hhere = h;
+        h = rvtarr[rvcount] - t;
+      }
+    }
+
+    int status = gsl_odeiv_evolve_apply (e, c, s,
+                                         &sys, 
+                                         &t, t1,
+                                         &h, y);
+
+    if (status != GSL_SUCCESS)
+        break;
+
+    if (RVS) {
+       if (onrv ==1) {
+         h = hhere;
+         func(t, y, dydt, mu);
+         vstar = 0;
+         for (i=0; i<npl; i++) {
+           vstar += -y[i*6+5]*mu[i+1]/mtot;
+         }
+         if (tve[3][rvcount] == 0) {
+           rvarr[rvcount] = vstar; 
+         } else {
+           rvarr[rvcount] = vstar + y[(((int) tve[3][rvcount])-1)*6+5];
+         }
+         rvcount += 1;
+
+
+       }
+    }
+
+    //distance squared to first planet
+    dist2 = pow(y[0],2)+pow(y[1],2)+pow(y[2],2);
+
+    for(pl=0; pl<npl; pl++) {  /* Cycle through the planets, searching for a transit. */
+        dpold[0][pl]=dp[0][pl];
+        dp[0][pl]=y[0+pl*6]*y[3+pl*6]+y[1+pl*6]*y[4+pl*6];
+        ps2=y[0+pl*6]*y[0+pl*6]+y[1+pl*6]*y[1+pl*6];
+
+      if( dp[0][pl]*dpold[0][pl] <= 0 && ps2 < dist2/dist2divisor && y[2+pl*6]<0 && brights>1) { 
+                     // A minimum projected-separation occurred: "Tc".  
+                //   ps2 constraint makes sure it's when y^2+z^2 is small-- its on the face of the star.  
+                  //   y[2] constraint means a primary eclipse, presuming that the observer is on the positive x=y[2] axis.
+        seteq(npl, yhone, y);
+        thone = t;
+
+        if (LTE) {
+          ii=0;
+          dt = -yhone[2+pl*6] / CAUPD;
+          seteq(npl, yhonedt, yhone);
+          gsl_odeiv_step_apply (s, thone, dt, yhonedt, yerrhone, NULL, NULL, &sys);
+          thonedt = thone+dt;
+ 
+          do {
+            func(thone, yhone, dydt, npl_mu);
+            func(thonedt, yhonedt, dydtdt, npl_mu);
+ 
+            for (j=0; j<6; j++) {
+              baryc[j] = 0.;
+              baryc2[j] = 0.;
+              dbarycdt[j] = 0.;
+              dbarycdt2[j] = 0.;
+              for (i=0; i<npl; i++) {
+                baryc[j] += yhone[j+i*6]*mu[i+1];
+                baryc2[j] += yhonedt[j+i*6]*mu[i+1];
+                dbarycdt[j] += dydt[j+i*6]*mu[i+1];
+                dbarycdt2[j] += dydtdt[j+i*6]*mu[i+1];
+              }
+              baryc[j] /= mtot;
+              baryc2[j] /= mtot;
+              dbarycdt[j] /= mtot;
+              dbarycdt2[j] /= mtot;
+ 
+              starimage[j] = baryc2[j]-baryc[j];
+              dstarimagedt[j] = dbarycdt2[j]-dbarycdt[j];
+            }
+ 
+            dp[0][pl] = (yhonedt[0+pl*6]-starimage[0])*(yhonedt[3+pl*6]-starimage[3]) + (yhonedt[1+pl*6]-starimage[1])*(yhonedt[4+pl*6]-starimage[4]);
+            double ddpdt = (dydtdt[0+pl*6]-dstarimagedt[0])*(dydtdt[0+pl*6]-dstarimagedt[0]) + (dydtdt[1+pl*6]-dstarimagedt[1])*(dydtdt[1+pl*6]-dstarimagedt[1]) + (yhonedt[0+pl*6]-starimage[0])*(dydtdt[3+pl*6]-dstarimagedt[3]) + (yhonedt[1+pl*6]-starimage[1])*(dydtdt[4+pl*6]-dstarimagedt[4]);
+ 
+ 
+            zs = 0.0;
+            zp = yhonedt[2+pl*6]/CAUPD;
+            zb = baryc[2]/CAUPD;
+            zb2 = baryc2[2]/CAUPD;
+            zs -= zb;
+            zp -= zb2;
+            dt1 = zs;
+            dt2 = -zp;
+            dt = dt1+dt2;
+            
+            tstep = - dp[0][pl]/ddpdt;
+            gsl_odeiv_step_apply (s, thone, tstep, yhone, yerrhone, NULL, NULL, &sys);
+            seteq(npl, yhonedt, yhone);
+            gsl_odeiv_step_apply (s, thone, dt, yhonedt, yerrhone, NULL, NULL, &sys);
+            thone += tstep;
+            thonedt = thone+dt;
+            ii++;
+ 
+          } while (ii<10 && fabs(tstep)>eps);
+
+          dist = sqrt( pow( (yhonedt[0+pl*6]-starimage[0]), 2) + pow( (yhonedt[1+pl*6]-starimage[1]), 2) ); 
+ 
+        } else {
+
+          ii=0;
+          do {
+            func (thone, yhone, dydt, npl_mu);
+            ddpdt = dydt[0+pl*6]*dydt[0+pl*6] + dydt[1+pl*6]*dydt[1+pl*6] + yhone[0+pl*6]*dydt[3+pl*6] + yhone[1+pl*6]*dydt[4+pl*6];
+            tstep = - dp[0][pl] / ddpdt;
+            gsl_odeiv_step_apply (s, thone, tstep, yhone, yerrhone, dydt, NULL, &sys);
+            thone += tstep;
+            dp[0][pl]=yhone[0+pl*6]*yhone[3+pl*6]+yhone[1+pl*6]*yhone[4+pl*6];
+            ii++;
+          } while (ii<5 && fabs(tstep)>eps);
+            
+          dist = sqrt(pow(yhone[0+pl*6],2)+pow(yhone[1+pl*6],2));
+
+        }
+
+        dp[0][pl]=y[0+pl*6]*y[3+pl*6]+y[1+pl*6]*y[4+pl*6];
+
+        if (dist < 2.0*((rstar + rstar*rad[pl])*RSUNAU)) {
+
+          transitcount[0][pl+1] += 1;  // Update the transit number. 
+
+          if (LTE) {
+            for (j=0; j<6; j++) {
+              baryc[j] = 0.;
+              baryc2[j] = 0.;
+              for (i=0; i<npl; i++) {
+                baryc[j] += yhone[j+i*6]*mu[i+1];
+                baryc2[j] += yhonedt[j+i*6]*mu[i+1];
+              }
+              baryc[j] /= mtot;
+              baryc2[j] /= mtot;
+ 
+              starimage[j] = baryc2[j]-baryc[j];
+            }
+ 
+            zs = 0.0;
+            zp = yhonedt[2+pl*6]/CAUPD;
+            zb = baryc[2]/CAUPD;
+            zb2 = baryc2[2]/CAUPD;
+            zs -= zb;
+            zp -= zb2;
+            dt1 = zs;
+            dt2 = -zp;
+            dt = dt1+dt2;
+ 
+            dist = sqrt( pow( yhonedt[0+pl*6] - starimage[0], 2) + pow( yhonedt[1+pl*6] - starimage[1], 2) ); 
+            vtrans = sqrt( pow( yhonedt[3+pl*6] - starimage[3], 2) + pow( yhonedt[4+pl*6] - starimage[4], 2) ); 
+          } else {
+            dist = sqrt(pow(yhone[0+pl*6],2)+pow(yhone[1+pl*6],2));
+            vtrans = sqrt(pow(yhone[3+pl*6],2)+pow(yhone[4+pl*6],2)); 
+            zs=0;
+            zb2=0;
+          }
+
+          t2 =  thone + zs;
+
+#if ( demcmc_compile == 0 ) 
+          fprintf(directory[0][pl+1], "%6d  %.18e  %.10e  %.10e\n", transitcount[0][pl+1], t2, dist, vtrans);
+#endif
+
+          double vplanet, toffset, tinit, tfin;
+          long ic, nc, ac;
+          double thone0, hold;
+
+          vplanet = fmax(vtrans, 0.0001); // can't divide by 0, so set min value. 
+          toffset = offsetmult*(rstar*(1+rad[pl]))*RSUNAU/vplanet;
+          toffset = fmin(toffset, offsetmin);
+          tinit = t2 - toffset;
+          tfin = t2 + toffset;
+          ic=0;
+          while (ic<(kk-1) && timelist[ic]<tinit) {
+            ic++;
+          } 
+          nc=0;
+          while ((ic+nc)<(kk-1) && timelist[ic+nc]<tfin) {
+            nc++;
+          }
+          seteq(npl, yhone0, yhone);
+          thone0=thone;
+          hold=h;
+
+          for (ac=0; ac<nc; ac++) {
+
+            if (whereplanets[0][ic+ac][pl+1] == 0) { // i.e. if this body's location not already computed
+ 
+              int tnum;
+              double tcur, ts1, ts2;
+
+              tnum = numplanets[0][ic+ac];
+              // stellar time 
+              tcur = timelist[ic+ac] - zs;
+              ts1 = tcur-thone;
+              if (fabs(ts1) > fabs(h)) {
+                h = fabs(h)*fabs(ts1)/ts1;
+              } else {
+                h = ts1;
+              }
+              while ( !(status!=GSL_SUCCESS) && !(dbleq(tcur, thone)) ){
+                status = gsl_odeiv_evolve_apply(e, c, s, &sys, &thone, tcur, &h, yhone); 
+              }
+              if (LTE) {
+                ts2 = (tcur+dt)-thonedt;
+                if (fabs(ts2) > fabs(h)) {
+                  h = fabs(h)*fabs(ts2)/ts2;
+                } else {
+                  h = ts2;
+                }
+                while ( !(status!=GSL_SUCCESS) && !(dbleq(tcur+dt, thonedt)) ){
+                  status = gsl_odeiv_evolve_apply(e, c, s, &sys, &thonedt, tcur+dt, &h, yhonedt); 
+                }
+              }
+              if (status != GSL_SUCCESS) {
+                printf("Big problem\n");
+                exit(0);
+              }
+  
+              if (LTE) {
+                for (j=0; j<6; j++) {
+                  baryc[j] = 0.;
+                  baryc2[j] = 0.;
+                  for (i=0; i<npl; i++) {
+                    baryc[j] += yhone[j+i*6]*mu[i+1];
+                    baryc2[j] += yhonedt[j+i*6]*mu[i+1];
+                  }
+                  baryc[j] /= mtot;
+                  baryc2[j] /= mtot;
+     
+                  starimage[j] = baryc2[j]-baryc[j];
+                }
+     
+                zs = 0.0;
+                zp = yhonedt[2+pl*6]/CAUPD;
+                zb = baryc[2]/CAUPD;
+                zb2 = baryc2[2]/CAUPD;
+                zs -= zb;
+                zp -= zb2;
+                dt1 = zs;
+                dt2 = -zp;
+                dt = dt1+dt2;
+              }
+ 
+              if (yhone[2+pl*6] < 0.0) {
+
+                whereplanets[0][ic+ac][pl+1] = 1;
+                tranarray[0][ic+ac][tnum][0] = rad[pl]*rstar*RSUNAU; 
+                numplanets[0][ic+ac]+=1;
+
+                if (LTE) {
+
+                  tranarray[0][ic+ac][tnum][1] = yhonedt[0+pl*6]-starimage[0];
+                  tranarray[0][ic+ac][tnum][2] = yhonedt[1+pl*6]-starimage[1];
+
+                } else {
+
+                  tranarray[0][ic+ac][tnum][1] = yhone[0+pl*6];
+                  tranarray[0][ic+ac][tnum][2] = yhone[1+pl*6];
+
+                }
+              } 
+            }
+          }
+          seteq(npl, yhone, yhone0);
+          thone=thone0;
+          h=hold;
+        } 
+      }
+    }
+    int st;
+    int st1;
+    for (st1=1; st1<brights; st1++) {
+      st = brightsindex[st1];
+      int stm1 = st-1;
+      dpold[st1][stm1]=dp[st1][stm1];
+      dp[st1][stm1]=y[0+stm1*6]*y[3+stm1*6]+y[1+stm1*6]*y[4+stm1*6];
+      ps2=y[0+stm1*6]*y[0+stm1*6]+y[1+stm1*6]*y[1+stm1*6];
+ 
+      if( dp[st1][stm1]*dpold[st1][stm1] <= 0 && ps2 < dist2/dist2divisor && y[2+stm1*6]>0 && brights > 1) { 
+
+        seteq(npl, yhone, y);
+        thone = t;
+
+        if (LTE) {
+          ii=0;
+          dt = yhone[2+stm1*6] / CAUPD;
+          seteq(npl, yhonedt, yhone);
+          gsl_odeiv_step_apply (s, thone, dt, yhonedt, yerrhone, NULL, NULL, &sys);
+          thonedt = thone+dt;
+ 
+          do {
+            func(thone, yhone, dydt, npl_mu);
+            func(thonedt, yhonedt, dydtdt, npl_mu);
+ 
+            for (j=0; j<6; j++) {
+              baryc[j] = 0.;
+              baryc2[j] = 0.;
+              dbarycdt[j] = 0.;
+              dbarycdt2[j] = 0.;
+              for (i=0; i<npl; i++) {
+                baryc[j] += yhone[j+i*6]*mu[i+1];
+                baryc2[j] += yhonedt[j+i*6]*mu[i+1];
+                dbarycdt[j] += dydt[j+i*6]*mu[i+1];
+                dbarycdt2[j] += dydtdt[j+i*6]*mu[i+1];
+              }
+              baryc[j] /= mtot;
+              baryc2[j] /= mtot;
+              dbarycdt[j] /= mtot;
+              dbarycdt2[j] /= mtot;
+ 
+              starimage[j] = -baryc2[j]+baryc[j];
+              dstarimagedt[j] = -dbarycdt2[j]+dbarycdt[j];
+            }
+ 
+            dp[st1][stm1] = (yhone[0+stm1*6]-starimage[0])*(yhone[3+stm1*6]-starimage[3]) + (yhone[1+stm1*6]-starimage[1])*(yhone[4+stm1*6]-starimage[4]);
+            double ddpdt = (dydt[0+stm1*6]-dstarimagedt[0])*(dydt[0+stm1*6]-dstarimagedt[0]) + (dydt[1+stm1*6]-dstarimagedt[1])*(dydt[1+stm1*6]-dstarimagedt[1]) + (yhone[0+stm1*6]-starimage[0])*(dydt[3+stm1*6]-dstarimagedt[3]) + (yhone[1+stm1*6]-starimage[1])*(dydt[4+stm1*6]-dstarimagedt[4]);
+ 
+ 
+            zs = yhone[2+stm1*6]/CAUPD;
+            zp = 0.0;
+            zb = baryc[2]/CAUPD;
+            zb2 = baryc2[2]/CAUPD;
+            zs -= zb;
+            zp -= zb2;
+            dt1 = zs;
+            dt2 = -zp;
+            dt = dt1+dt2;
+            
+            tstep = - dp[st1][stm1]/ddpdt;
+            gsl_odeiv_step_apply (s, thone, tstep, yhone, yerrhone, NULL, NULL, &sys);
+            seteq(npl, yhonedt, yhone);
+            gsl_odeiv_step_apply (s, thone, dt, yhonedt, yerrhone, NULL, NULL, &sys);
+            thone += tstep;
+            thonedt = thone+dt;
+            ii++;
+ 
+          } while (ii<10 && fabs(tstep)>eps);
+
+          dist = sqrt( pow( (yhone[0+stm1*6]-starimage[0]), 2) + pow( (yhone[1+stm1*6]-starimage[1]), 2) ); 
+ 
+        } else {
+
+          ii=0;
+          do {
+            func (thone, yhone, dydt, npl_mu);
+            ddpdt = dydt[0+stm1*6]*dydt[0+stm1*6] + dydt[1+stm1*6]*dydt[1+stm1*6] + yhone[0+stm1*6]*dydt[3+stm1*6] + yhone[1+stm1*6]*dydt[4+stm1*6];
+            tstep = - dp[st1][stm1] / ddpdt;
+            gsl_odeiv_step_apply (s, thone, tstep, yhone, yerrhone, dydt, NULL, &sys);
+            thone += tstep;
+            dp[st1][stm1]=yhone[0+stm1*6]*yhone[3+stm1*6]+yhone[1+stm1*6]*yhone[4+stm1*6];
+            ii++;
+          } while (ii<5 && fabs(tstep)>eps);
+          
+          dist = sqrt(pow(yhone[0+stm1*6],2)+pow(yhone[1+stm1*6],2));
+
+        }
+
+        dp[st1][stm1]=y[0+stm1*6]*y[3+stm1*6]+y[1+stm1*6]*y[4+stm1*6];
+
+        if (dist < 2.0*((rstar + rstar*rad[stm1])*RSUNAU)) {
+
+          transitcount[st1][0] += 1;  // Update the transit number. 
+
+          if (LTE) {
+            for (j=0; j<6; j++) {
+              baryc[j] = 0.;
+              baryc2[j] = 0.;
+              for (i=0; i<npl; i++) {
+                baryc[j] += yhone[j+i*6]*mu[i+1];
+                baryc2[j] += yhonedt[j+i*6]*mu[i+1];
+              }
+              baryc[j] /= mtot;
+              baryc2[j] /= mtot;
+ 
+              starimage[j] = -baryc2[j]+baryc[j];
+            }
+            zs = yhone[2+stm1*6]/CAUPD;
+            zp = 0.0;
+            zb = baryc[2]/CAUPD;
+            zb2 = baryc2[2]/CAUPD;
+            zs -= zb;
+            zp -= zb2;
+            dt1 = zs;
+            dt2 = -zp;
+            dt = dt1+dt2;
+            
+            dist = sqrt( pow( yhone[0+stm1*6] - starimage[0], 2) + pow( yhone[1+stm1*6] - starimage[1], 2) ); 
+            vtrans = sqrt( pow( yhone[3+stm1*6] - starimage[3], 2) + pow( yhone[4+stm1*6] - starimage[4], 2) ); 
+          } else {
+            dist = sqrt(pow(yhone[0+stm1*6],2)+pow(yhone[1+stm1*6],2));
+            vtrans = sqrt(pow(yhone[3+stm1*6],2)+pow(yhone[4+stm1*6],2)); 
+            zs=0;
+            zb2=0;
+          }
+
+          t2 = thone + zs;
+
+#if ( demcmc_compile == 0 )
+          fprintf(directory[st1][0], "%6d  %.18e  %.10e  %.10e\n", transitcount[st1][0], t2, dist, vtrans);
+#endif
+
+          double vplanet, toffset, tinit, tfin;
+          long ic, nc, ac;
+          double thone0, hold;
+
+          vplanet = fmax(vtrans, 0.0001);
+          toffset = offsetmult*(rstar*(1+rad[stm1]))*RSUNAU/vplanet;
+          toffset = fmin(toffset, offsetmin);
+          tinit = t2 - toffset;
+          tfin = t2 + toffset;
+          ic=0;
+          while (ic<(kk-1) && timelist[ic]<tinit) {
+            ic++;
+          } 
+          nc=0;
+          while ((ic+nc)<(kk-1) && timelist[ic+nc]<tfin) {
+            nc++;
+          }
+          seteq(npl, yhone0, yhone);
+          thone0=thone;
+          hold=h;
+
+          for (ac=0; ac<nc; ac++) {
+
+            if (whereplanets[st1][ic+ac][0] == 0) { // i.e. if this body's location not already computed
+ 
+              int tnum;
+              double tcur, ts1, ts2;
+
+              tnum = numplanets[st1][ic+ac];
+              // stellar time 
+              tcur = timelist[ic+ac] - zs;
+              ts1 = (tcur-thone);
+              if (fabs(ts1) > fabs(h)) {
+                h = fabs(h)*fabs(ts1)/ts1;
+              } else {
+                h = ts1;
+              }
+              while ( !(status!=GSL_SUCCESS) && !(dbleq(tcur, thone)) ){
+                status = gsl_odeiv_evolve_apply(e, c, s, &sys, &thone, tcur, &h, yhone); 
+              }
+              if (LTE) {
+                ts2 = (tcur+dt)-thonedt;
+                if (fabs(ts2) > fabs(h)) {
+                  h = fabs(h)*fabs(ts2)/ts2;
+                } else {
+                  h = ts2;
+                }
+                while ( !(status!=GSL_SUCCESS) && !(dbleq(tcur+dt, thonedt)) ){
+                  status = gsl_odeiv_evolve_apply(e, c, s, &sys, &thonedt, tcur+dt, &h, yhonedt); 
+                }
+              }
+              if (status != GSL_SUCCESS) {
+                printf("Big problem\n");
+                exit(0);
+              }
+  
+              if (LTE) {
+                for (j=0; j<6; j++) {
+                  baryc[j] = 0.;
+                  baryc2[j] = 0.;
+                  for (i=0; i<npl; i++) {
+                    baryc[j] += yhone[j+i*6]*mu[i+1];
+                    baryc2[j] += yhonedt[j+i*6]*mu[i+1];
+                  }
+                  baryc[j] /= mtot;
+                  baryc2[j] /= mtot;
+     
+                  starimage[j] = -baryc2[j]+baryc[j];
+                }
+                zs = yhone[2+stm1*6]/CAUPD;
+                zp = 0.0;
+                zb = baryc[2]/CAUPD;
+                zb2 = baryc2[2]/CAUPD;
+                zs -= zb;
+                zp -= zb2;
+                dt1 = zs;
+                dt2 = -zp;
+                dt = dt1+dt2;
+              }
+ 
+              if (yhone[2+stm1*6] > 0.0) {
+
+                whereplanets[st1][ic+ac][0] = 1;
+                tranarray[st1][ic+ac][tnum][0] = rstar*RSUNAU; 
+                numplanets[st1][ic+ac]+=1;
+
+                if (LTE) {
+
+                  tranarray[st1][ic+ac][tnum][1] = -(yhone[0+stm1*6]-starimage[0]);
+                  tranarray[st1][ic+ac][tnum][2] = -(yhone[1+stm1*6]-starimage[1]);
+
+                } else {
+
+                  tranarray[st1][ic+ac][tnum][1] = -yhone[0+stm1*6];
+                  tranarray[st1][ic+ac][tnum][2] = -yhone[1+stm1*6];
+
+                }
+              } 
+            }
+          }
+          seteq(npl, yhone, yhone0);
+          thone=thone0;
+          h=hold;
+        } 
+      }
+      for (pl=0; pl<npl; pl++) {
+        if (pl != stm1) {
+             dpold[st1][pl]=dp[st1][pl];
+          dp[st1][pl]=(y[0+pl*6]-y[0+st1*6])*(y[3+pl*6]-y[3+st1*6]) + (y[1+pl*6]-y[1+st1*6])*(y[4+pl*6]-y[4+st1*pl]);
+          ps2=pow((y[0+pl*6]-y[0+st1*6]),2) + pow((y[1+pl*6]-y[1+st1*6]),2);
+
+          if (dp[st1][pl]*dpold[st1][pl] <= 0 && ps2 < dist2/dist2divisor && y[2+st1*6]>y[2+pl*6] && brights > 1) { 
+    
+                seteq(npl, yhone, y);
+                thone = t;
+    
+            if (LTE) {
+              ii=0;
+              dt = -(yhone[2+pl*6] - yhone[2+st1*6]) / CAUPD;
+              seteq(npl, yhonedt, yhone);
+              gsl_odeiv_step_apply (s, thone, dt, yhonedt, yerrhone, NULL, NULL, &sys);
+              thonedt = thone+dt;
+     
+              do {
+                func(thone, yhone, dydt, npl_mu);
+                func(thonedt, yhonedt, dydtdt, npl_mu);
+     
+                for (j=0; j<6; j++) {
+                  baryc[j] = 0.;
+                  baryc2[j] = 0.;
+                  dbarycdt[j] = 0.;
+                  dbarycdt2[j] = 0.;
+                  for (i=0; i<npl; i++) {
+                    baryc[j] += yhone[j+i*6]*mu[i+1];
+                    baryc2[j] += yhonedt[j+i*6]*mu[i+1];
+                    dbarycdt[j] += dydt[j+i*6]*mu[i+1];
+                    dbarycdt2[j] += dydtdt[j+i*6]*mu[i+1];
+                  }
+                  baryc[j] /= mtot;
+                  baryc2[j] /= mtot;
+                  dbarycdt[j] /= mtot;
+                  dbarycdt2[j] /= mtot;
+    
+                  //starimage should really be starshift here
+                  starimage[j] = baryc2[j]-baryc[j];
+                  dstarimagedt[j] = dbarycdt2[j]-dbarycdt[j];
+                }
+    
+                dp[st1][pl] = (yhonedt[0+pl*6]-yhone[0+st1*6]-starimage[0])*(yhonedt[3+pl*6]-yhone[3+st1*6]-starimage[3]) + (yhonedt[1+pl*6]-yhone[1+st1*6]-starimage[1])*(yhonedt[4+pl*6]-yhone[4+st1*6]-starimage[4]);
+                double ddpdt = (dydtdt[0+pl*6]-dydt[0+st1*6]-dstarimagedt[0])*(dydtdt[0+pl*6]-dydt[0+st1*6]-dstarimagedt[0]) + (dydtdt[1+pl*6]-dydt[1+st1*6]-dstarimagedt[1])*(dydtdt[1+pl*6]-dydt[1+st1*6]-dstarimagedt[1]) + (yhonedt[0+pl*6]-yhone[0+st1*6]-starimage[0])*(dydtdt[3+pl*6]-dydt[3+st1*6]-dstarimagedt[3]) + (yhonedt[1+pl*6]-yhone[1+st1*6]-starimage[1])*(dydt[4+pl*6]-dydt[4+st1*6]-dstarimagedt[4]);
+     
+     
+                zs = yhone[2+st1*6]/CAUPD;
+                zp = yhonedt[2+pl*6]/CAUPD;
+                zb = baryc[2]/CAUPD;
+                zb2 = baryc2[2]/CAUPD;
+                zs -= zb;
+                zp -= zb2;
+                dt1 = zs;
+                dt2 = -zp;
+                dt = dt1+dt2;
+                
+                tstep = - dp[st1][pl]/ddpdt;
+                gsl_odeiv_step_apply (s, thone, tstep, yhone, yerrhone, NULL, NULL, &sys);
+                seteq(npl, yhonedt, yhone);
+                gsl_odeiv_step_apply (s, thone, dt, yhonedt, yerrhone, NULL, NULL, &sys);
+                thone += tstep;
+                thonedt = thone+dt;
+                ii++;
+     
+              } while (ii<10 && fabs(tstep)>eps);
+                
+              dist = sqrt( pow( (yhonedt[0+pl*6]-yhone[0+st1*6]-starimage[0]), 2) + pow( (yhonedt[1+pl*6]-yhone[1+st1*6]-starimage[1]), 2) ); 
+     
+            } else {
+    
+              ii=0;
+              do {
+                func (thone, yhone, dydt, npl_mu);
+                ddpdt = (dydt[0+pl*6]-dydt[0+stm1*6])*(dydt[0+pl*6]-dydt[0+stm1*6]) + (dydt[1+pl*6]-dydt[1+stm1*6])*(dydt[1+pl*6]-dydt[1+stm1*6]) + (yhone[0+pl*6]-yhone[0+stm1*6])*(dydt[3+pl*6]-dydt[3+stm1*6]) + (yhone[1+pl*6]-yhone[1+stm1*6])*(dydt[4+pl*6]-dydt[4+stm1*6]);
+                tstep = - dp[st1][pl] / ddpdt;
+                gsl_odeiv_step_apply (s, thone, tstep, yhone, yerrhone, dydt, NULL, &sys);
+                thone += tstep;
+                dp[st1][pl]=(yhone[0+pl*6]-yhone[0+stm1*6])*(yhone[3+pl*6]-yhone[3+stm1*6]) + (yhone[1+pl*6]-yhone[1+stm1*6])*(yhone[4+pl*6]-yhone[4+stm1*6]);
+                ii++;
+              } while (ii<5 && fabs(tstep)>eps);
+                
+              dist = sqrt( pow( (yhone[0+pl*6]-yhone[0+stm1*6]), 2) + pow( (yhone[1+pl*6]-yhone[1+stm1*6]), 2) ); 
+    
+            }
+    
+            dp[st1][pl]=(y[0+pl*6]-y[0+stm1*6])*(y[3+pl*6]-y[3+stm1*6]) + (y[1+pl*6]-y[1+stm1*6])*(y[4+pl*6]-y[4+stm1*6]);
+    
+            if (dist < 2.0*((rstar*rad[st1] + rstar*rad[pl])*RSUNAU)) {
+    
+              transitcount[st1][pl+1] += 1;  // Update the transit number. 
+    
+              if (LTE) {
+                for (j=0; j<6; j++) {
+                  baryc[j] = 0.;
+                  baryc2[j] = 0.;
+                  for (i=0; i<npl; i++) {
+                    baryc[j] += yhone[j+i*6]*mu[i+1];
+                    baryc2[j] += yhonedt[j+i*6]*mu[i+1];
+                  }
+                  baryc[j] /= mtot;
+                  baryc2[j] /= mtot;
+     
+                  starimage[j] = baryc2[j]-baryc[j];
+                }
+                zs = yhone[2+st1*6]/CAUPD;
+                zp = yhonedt[2+pl*6]/CAUPD;
+                zb = baryc[2]/CAUPD;
+                zb2 = baryc2[2]/CAUPD;
+                zs -= zb;
+                zp -= zb2;
+                dt1 = zs;
+                dt2 = -zp;
+                dt = dt1+dt2;
+                
+                dist = sqrt( pow( (yhonedt[0+pl*6]-yhone[0+st1*6]-starimage[0]), 2) + pow( (yhonedt[1+pl*6]-yhone[1+st1*6]-starimage[1]), 2) ); 
+                vtrans = sqrt(pow(yhonedt[3+pl*6]-yhone[3+st1*6] - starimage[3],2) + pow(yhonedt[4+pl*6]-yhone[4+st1*6] - starimage[4],2)); 
+              } else {
+                dist = sqrt( pow( (yhone[0+pl*6]-yhone[0+stm1*6]), 2) + pow( (yhone[1+pl*6]-yhone[1+stm1*6]), 2) ); 
+                vtrans = sqrt(pow(yhone[3+pl*6]-yhone[3+stm1*6], 2) + pow(yhone[4+pl*6]-yhone[4+stm1*6], 2)); 
+                //dist = sqrt( pow( (yhonedt[0+pl*6]-yhone[0+st1*6]), 2) + pow( (yhonedt[1+pl*6]-yhone[1+st1*6]), 2) ); 
+                //vtrans = sqrt(pow(yhonedt[3+pl*6]-yhone[3+st1*6], 2) + pow(yhonedt[4+pl*6]-yhone[4+st1*6], 2)); 
+                zs=0;
+                zb2=0;
+              }
+    
+              t2 = thone + zs;
+    
+#if ( demcmc_compile == 0 )//|| demcmc_compile == 3) 
+              fprintf(directory[st1][pl+1], "%6d  %.18e  %.10e  %.10e\n", transitcount[st1][pl+1], t2, dist, vtrans);
+#endif
+
+
+              double vplanet, toffset, tinit, tfin;
+              long ic, nc, ac;
+              double thone0, hold;
+
+              vplanet = fmax(vtrans, 0.0001);
+              toffset = offsetmult*(rstar*(rad[st1]+rad[pl]))*RSUNAU/vplanet;
+              toffset = fmin(toffset, offsetminout);
+              tinit = t2 - toffset;
+              tfin = t2 + toffset;
+              ic=0;
+              while (ic<(kk-1) && timelist[ic]<tinit) ic++; 
+              nc=0;
+              while ((ic+nc)<(kk-1) && timelist[ic+nc]<tfin) nc++;
+
+              seteq(npl, yhone0, yhone);
+              thone0=thone;
+              hold=h;
+
+              //This is fairly inexact for first time if yhone_Z is changing considerably Can try to fix this in future versions. 
+              for (ac=0; ac<nc; ac++) {
+                if (whereplanets[st1][ic+ac][pl+1] == 0) { // i.e. if this body's location not already computed
+
+                  int tnum;
+                  double tcur, ts1, ts2;
+
+                  tnum = numplanets[st1][ic+ac];
+                  tcur = timelist[ic+ac] - zs;
+                  ts1 = (tcur-thone);
+                  if (fabs(ts1) > fabs(h)) {
+                    h = fabs(h)*fabs(ts1)/ts1;
+                  } else {
+                    h = ts1;
+                  }
+                  while ( !(status!=GSL_SUCCESS) && !(dbleq(tcur, thone)) ){
+                    status = gsl_odeiv_evolve_apply(e, c, s, &sys, &thone, tcur, &h, yhone); 
+                  }
+                  if (LTE) {
+                    ts2 = (tcur+dt)-thonedt;
+                    if (fabs(ts2) > fabs(h)) {
+                      h = fabs(h)*fabs(ts2)/ts2;
+                    } else {
+                      h = ts2;
+                    }
+                    while ( !(status!=GSL_SUCCESS) && !(dbleq(tcur+dt, thonedt)) ){
+                      status = gsl_odeiv_evolve_apply(e, c, s, &sys, &thonedt, tcur+dt, &h, yhonedt); 
+                    }
+                  }
+                  if (status != GSL_SUCCESS) {
+                    printf("Big problem\n");
+                    exit(0);
+                  }
+      
+                  if (LTE) {
+                    for (j=0; j<6; j++) {
+                      baryc[j] = 0.;
+                      baryc2[j] = 0.;
+                      for (i=0; i<npl; i++) {
+                        baryc[j] += yhone[j+i*6]*mu[i+1];
+                        baryc2[j] += yhonedt[j+i*6]*mu[i+1];
+                      }
+                      baryc[j] /= mtot;
+                      baryc2[j] /= mtot;
+         
+                      starimage[j] = baryc2[j]-baryc[j];
+                    }
+         
+                    zs = yhone[2+st1*6]/CAUPD;
+                    zp = yhonedt[2+pl*6]/CAUPD;
+                    zb = baryc[2]/CAUPD;
+                    zb2 = baryc2[2]/CAUPD;
+                    zs -= zb;
+                    zp -= zb2;
+                    dt1 = zs;
+                    dt2 = -zp;
+                    dt = dt1+dt2;
+                  }
+ 
+                  if (yhone[2+st1*6] > yhone[2+pl*6]) {
+
+                    whereplanets[st1][ic+ac][pl+1] = 1;
+                    numplanets[st1][ic+ac]+=1;
+                    tranarray[st1][ic+ac][tnum][0] = rad[pl]*rstar*RSUNAU;
+
+                    if (LTE) {
+
+                      tranarray[st1][ic+ac][tnum][1] = yhonedt[0+pl*6] - yhone[0+st1*6] - starimage[0];
+                      tranarray[st1][ic+ac][tnum][2] = yhonedt[1+pl*6] - yhone[1+st1*6] - starimage[1];
+                    
+                    } else {
+                    
+                      tranarray[st1][ic+ac][tnum][1] = yhone[0+pl*6] - yhone[0+st1*6];
+                      tranarray[st1][ic+ac][tnum][2] = yhone[1+pl*6] - yhone[1+st1*6];
+
+                    }
+                  }
+                } 
+              }
+
+              seteq(npl, yhone, yhone0);
+              thone=thone0;
+              h=hold;
+            }
+          }
+        }
+      }
+    }
+  }
+
+
+
+
+  seteq(npl, y, yin);
+  for(pl=0; pl<npl; pl++) dp[0][pl]=y[0+pl*6]*y[3+pl*6]+y[1+pl*6]*y[4+pl*6];
+  for (i=1; i<brights; i++) {
+      for(pl=0; pl<npl; pl++) {
+          dp[i][pl]=(y[0+pl*6]-y[0+(i-1)*6])*y[3+pl*6] + (y[1+pl*6]-y[1+(i-1)*6])*y[4+pl*6];
+      }
+  }
+  t = tstart;
+  h = -HStart;
+  for (k=0; k<brights; k++) {
+    for(pl=0; pl<(npl+1); pl++) transitcount[k][pl] = 0;
+  }
+    
+
+  if (RVS) {
+    rvcount = startrvcount-1;
+  }
+
+
+
+  while (t > t0+1) {
+
+    if (RVS) {
+      onrv=0;
+      if ( (h + t) < rvtarr[rvcount]) {  
+        onrv = 1;
+        hhere = h;
+        h = rvtarr[rvcount] - t;
+      }
+    }
+
+    int status = gsl_odeiv_evolve_apply (e, c, s,
+                                         &sys, 
+                                         &t, t0,
+                                         &h, y);
+
+    if (status != GSL_SUCCESS)
+        break;
+
+    if (RVS) {
+       if (onrv ==1) {
+         h = hhere;
+         func(t, y, dydt, mu);
+         double vstar = 0;
+         for (i=0; i<npl; i++) {
+           vstar += -y[i*6+5]*mu[i+1]/mtot;
+         }
+         if (tve[3][rvcount] == 0) {
+           rvarr[rvcount] = vstar; 
+         } else {
+           rvarr[rvcount] = vstar + y[(((int) tve[3][rvcount])-1)*6+5];
+         }
+         rvcount += 1;
+       }
+    }
+
+    dist2 = pow(y[0],2)+pow(y[1],2)+pow(y[2],2);
+
+    for(pl=0; pl<npl; pl++) {  /* Cycle through the planets, searching for a transit. */
+        dpold[0][pl]=dp[0][pl];
+        dp[0][pl]=y[0+pl*6]*y[3+pl*6]+y[1+pl*6]*y[4+pl*6];
+        ps2=y[0+pl*6]*y[0+pl*6]+y[1+pl*6]*y[1+pl*6];
+
+      if( dp[0][pl]*dpold[0][pl] <= 0 && ps2 < dist2/dist2divisor && y[2+pl*6]<0 && brights>1) { 
+                     // A minimum projected-separation occurred: "Tc".  
+                //   ps2 constraint makes sure it's when y^2+z^2 is small-- its on the face of the star.  
+                  //   y[2] constraint means a primary eclipse, presuming that the observer is on the positive x=y[2] axis.
+
+        seteq(npl, yhone, y);
+        thone = t;
+
+        if (LTE) {
+          ii=0;
+          dt = -yhone[2+pl*6] / CAUPD;
+          seteq(npl, yhonedt, yhone);
+          gsl_odeiv_step_apply (s, thone, dt, yhonedt, yerrhone, NULL, NULL, &sys);
+          thonedt = thone+dt;
+ 
+          do {
+            func(thone, yhone, dydt, npl_mu);
+            func(thonedt, yhonedt, dydtdt, npl_mu);
+ 
+            for (j=0; j<6; j++) {
+              baryc[j] = 0.;
+              baryc2[j] = 0.;
+              dbarycdt[j] = 0.;
+              dbarycdt2[j] = 0.;
+              for (i=0; i<npl; i++) {
+                baryc[j] += yhone[j+i*6]*mu[i+1];
+                baryc2[j] += yhonedt[j+i*6]*mu[i+1];
+                dbarycdt[j] += dydt[j+i*6]*mu[i+1];
+                dbarycdt2[j] += dydtdt[j+i*6]*mu[i+1];
+              }
+              baryc[j] /= mtot;
+              baryc2[j] /= mtot;
+              dbarycdt[j] /= mtot;
+              dbarycdt2[j] /= mtot;
+ 
+              starimage[j] = baryc2[j]-baryc[j];
+              dstarimagedt[j] = dbarycdt2[j]-dbarycdt[j];
+            }
+ 
+            dp[0][pl] = (yhonedt[0+pl*6]-starimage[0])*(yhonedt[3+pl*6]-starimage[3]) + (yhonedt[1+pl*6]-starimage[1])*(yhonedt[4+pl*6]-starimage[4]);
+            double ddpdt = (dydtdt[0+pl*6]-dstarimagedt[0])*(dydtdt[0+pl*6]-dstarimagedt[0]) + (dydtdt[1+pl*6]-dstarimagedt[1])*(dydtdt[1+pl*6]-dstarimagedt[1]) + (yhonedt[0+pl*6]-starimage[0])*(dydtdt[3+pl*6]-dstarimagedt[3]) + (yhonedt[1+pl*6]-starimage[1])*(dydtdt[4+pl*6]-dstarimagedt[4]);
+ 
+ 
+            zs = 0.0;
+            zp = yhonedt[2+pl*6]/CAUPD;
+            zb = baryc[2]/CAUPD;
+            zb2 = baryc2[2]/CAUPD;
+            zs -= zb;
+            zp -= zb2;
+            dt1 = zs;
+            dt2 = -zp;
+            dt = dt1+dt2;
+            
+            tstep = - dp[0][pl]/ddpdt;
+            gsl_odeiv_step_apply (s, thone, tstep, yhone, yerrhone, NULL, NULL, &sys);
+            seteq(npl, yhonedt, yhone);
+            gsl_odeiv_step_apply (s, thone, dt, yhonedt, yerrhone, NULL, NULL, &sys);
+            thone += tstep;
+            thonedt = thone+dt;
+            ii++;
+ 
+          } while (ii<10 && fabs(tstep)>eps);
+
+          dist = sqrt( pow( (yhonedt[0+pl*6]-starimage[0]), 2) + pow( (yhonedt[1+pl*6]-starimage[1]), 2) ); 
+ 
+        } else {
+
+          ii=0;
+          do {
+            func (thone, yhone, dydt, npl_mu);
+            ddpdt = dydt[0+pl*6]*dydt[0+pl*6] + dydt[1+pl*6]*dydt[1+pl*6] + yhone[0+pl*6]*dydt[3+pl*6] + yhone[1+pl*6]*dydt[4+pl*6];
+            tstep = - dp[0][pl] / ddpdt;
+            gsl_odeiv_step_apply (s, thone, tstep, yhone, yerrhone, dydt, NULL, &sys);
+            thone += tstep;
+            dp[0][pl]=yhone[0+pl*6]*yhone[3+pl*6]+yhone[1+pl*6]*yhone[4+pl*6];
+            ii++;
+          } while (ii<5 && fabs(tstep)>eps);
+            
+          dist = sqrt(pow(yhone[0+pl*6],2)+pow(yhone[1+pl*6],2));
+
+        }
+
+        dp[0][pl]=y[0+pl*6]*y[3+pl*6]+y[1+pl*6]*y[4+pl*6];
+
+        if (dist < 2.0*((rstar + rstar*rad[pl])*RSUNAU)) {
+
+          transitcount[0][pl+1] -= 1;  // Update the transit number. 
+
+          if (LTE) {
+            for (j=0; j<6; j++) {
+              baryc[j] = 0.;
+              baryc2[j] = 0.;
+              for (i=0; i<npl; i++) {
+                baryc[j] += yhone[j+i*6]*mu[i+1];
+                baryc2[j] += yhonedt[j+i*6]*mu[i+1];
+              }
+              baryc[j] /= mtot;
+              baryc2[j] /= mtot;
+ 
+              starimage[j] = baryc2[j]-baryc[j];
+            }
+ 
+            zs = 0.0;
+            zp = yhonedt[2+pl*6]/CAUPD;
+            zb = baryc[2]/CAUPD;
+            zb2 = baryc2[2]/CAUPD;
+            zs -= zb;
+            zp -= zb2;
+            dt1 = zs;
+            dt2 = -zp;
+            dt = dt1+dt2;
+ 
+            dist = sqrt( pow( yhonedt[0+pl*6] - starimage[0], 2) + pow( yhonedt[1+pl*6] - starimage[1], 2) ); 
+            vtrans = sqrt( pow( yhonedt[3+pl*6] - starimage[3], 2) + pow( yhonedt[4+pl*6] - starimage[4], 2) ); 
+          } else {
+            dist = sqrt(pow(yhone[0+pl*6],2)+pow(yhone[1+pl*6],2));
+            vtrans = sqrt(pow(yhone[3+pl*6],2)+pow(yhone[4+pl*6],2)); 
+            zs=0;
+            zb2=0;
+          }
+
+          t2 =  thone + zs;
+
+#if ( demcmc_compile == 0 )//|| demcmc_compile == 3) 
+          fprintf(directory[0][pl+1], "%6d  %.18e  %.10e  %.10e\n", transitcount[0][pl+1], t2, dist, vtrans);
+#endif
+
+          double vplanet, toffset, tinit, tfin;
+          long ic, nc, ac;
+          double thone0, hold;
+
+          vplanet = fmax(vtrans, 0.0001); // can't divide by 0, so set min value. 
+          toffset = offsetmult*(rstar*(1+rad[pl]))*RSUNAU/vplanet;
+          toffset = fmin(toffset, offsetmin);
+          tinit = t2 - toffset;
+          tfin = t2 + toffset;
+          ic=0;
+          while (ic<(kk-1) && timelist[ic]<tinit) {
+            ic++;
+          } 
+          nc=0;
+          while ((ic+nc)<(kk-1) && timelist[ic+nc]<tfin) {
+            nc++;
+          }
+          seteq(npl, yhone0, yhone);
+          thone0=thone;
+          hold=h;
+
+          for (ac=0; ac<nc; ac++) {
+
+            if (whereplanets[0][ic+ac][pl+1] == 0) { // i.e. if this body's location not already computed
+ 
+              int tnum;
+              double tcur, ts1, ts2;
+
+              tnum = numplanets[0][ic+ac];
+              // stellar time 
+              tcur = timelist[ic+ac] - zs;
+              ts1 = (tcur-thone);
+              if (fabs(ts1) > fabs(h)) {
+                h = fabs(h)*fabs(ts1)/ts1;
+              } else {
+                h = ts1;
+              }
+              while ( !(status!=GSL_SUCCESS) && !(dbleq(tcur, thone)) ){
+                status = gsl_odeiv_evolve_apply(e, c, s, &sys, &thone, tcur, &h, yhone); 
+              }
+              if (LTE) {
+                ts2 = (tcur+dt)-thonedt;
+                if (fabs(ts2) > fabs(h)) {
+                  h = fabs(h)*fabs(ts2)/ts2;
+                } else {
+                  h = ts2;
+                }
+                while ( !(status!=GSL_SUCCESS) && !(dbleq(tcur+dt, thonedt)) ){
+                  status = gsl_odeiv_evolve_apply(e, c, s, &sys, &thonedt, tcur+dt, &h, yhonedt); 
+                }
+              }
+              if (status != GSL_SUCCESS) {
+                printf("Big problem\n");
+                exit(0);
+              }
+  
+              if (LTE) {
+                for (j=0; j<6; j++) {
+                  baryc[j] = 0.;
+                  baryc2[j] = 0.;
+                  for (i=0; i<npl; i++) {
+                    baryc[j] += yhone[j+i*6]*mu[i+1];
+                    baryc2[j] += yhonedt[j+i*6]*mu[i+1];
+                  }
+                  baryc[j] /= mtot;
+                  baryc2[j] /= mtot;
+     
+                  starimage[j] = baryc2[j]-baryc[j];
+                }
+     
+                zs = 0.0;
+                zp = yhonedt[2+pl*6]/CAUPD;
+                zb = baryc[2]/CAUPD;
+                zb2 = baryc2[2]/CAUPD;
+                zs -= zb;
+                zp -= zb2;
+                dt1 = zs;
+                dt2 = -zp;
+                dt = dt1+dt2;
+              }
+ 
+              if (yhone[2+pl*6] < 0.0) {
+
+                whereplanets[0][ic+ac][pl+1] = 1;
+                tranarray[0][ic+ac][tnum][0] = rad[pl]*rstar*RSUNAU; 
+                numplanets[0][ic+ac]+=1;
+
+                if (LTE) {
+
+                  tranarray[0][ic+ac][tnum][1] = yhonedt[0+pl*6]-starimage[0];
+                  tranarray[0][ic+ac][tnum][2] = yhonedt[1+pl*6]-starimage[1];
+
+                } else {
+
+                  tranarray[0][ic+ac][tnum][1] = yhone[0+pl*6];
+                  tranarray[0][ic+ac][tnum][2] = yhone[1+pl*6];
+
+                }
+              } 
+            }
+          }
+          seteq(npl, yhone, yhone0);
+          thone=thone0;
+          h=hold;
+        } 
+      }
+    }
+    int st;
+    int st1;
+    for (st1=1; st1<brights; st1++) {
+      st = brightsindex[st1];
+      int stm1 = st-1;
+      dpold[st1][stm1]=dp[st1][stm1];
+      dp[st1][stm1]=y[0+stm1*6]*y[3+stm1*6]+y[1+stm1*6]*y[4+stm1*6];
+      ps2=y[0+stm1*6]*y[0+stm1*6]+y[1+stm1*6]*y[1+stm1*6];
+ 
+      if( dp[st1][stm1]*dpold[st1][stm1] <= 0 && ps2 < dist2/dist2divisor && y[2+stm1*6]>0 && brights > 1) { 
+
+        seteq(npl, yhone, y);
+        thone = t;
+
+        if (LTE) {
+          ii=0;
+          dt = yhone[2+stm1*6] / CAUPD;
+          seteq(npl, yhonedt, yhone);
+          gsl_odeiv_step_apply (s, thone, dt, yhonedt, yerrhone, NULL, NULL, &sys);
+          thonedt = thone+dt;
+ 
+          do {
+            func(thone, yhone, dydt, npl_mu);
+            func(thonedt, yhonedt, dydtdt, npl_mu);
+ 
+            for (j=0; j<6; j++) {
+              baryc[j] = 0.;
+              baryc2[j] = 0.;
+              dbarycdt[j] = 0.;
+              dbarycdt2[j] = 0.;
+              for (i=0; i<npl; i++) {
+                baryc[j] += yhone[j+i*6]*mu[i+1];
+                baryc2[j] += yhonedt[j+i*6]*mu[i+1];
+                dbarycdt[j] += dydt[j+i*6]*mu[i+1];
+                dbarycdt2[j] += dydtdt[j+i*6]*mu[i+1];
+              }
+              baryc[j] /= mtot;
+              baryc2[j] /= mtot;
+              dbarycdt[j] /= mtot;
+              dbarycdt2[j] /= mtot;
+ 
+              starimage[j] = -baryc2[j]+baryc[j];
+              dstarimagedt[j] = -dbarycdt2[j]+dbarycdt[j];
+            }
+ 
+            dp[st1][stm1] = (yhone[0+stm1*6]-starimage[0])*(yhone[3+stm1*6]-starimage[3]) + (yhone[1+stm1*6]-starimage[1])*(yhone[4+stm1*6]-starimage[4]);
+            double ddpdt = (dydt[0+stm1*6]-dstarimagedt[0])*(dydt[0+stm1*6]-dstarimagedt[0]) + (dydt[1+stm1*6]-dstarimagedt[1])*(dydt[1+stm1*6]-dstarimagedt[1]) + (yhone[0+stm1*6]-starimage[0])*(dydt[3+stm1*6]-dstarimagedt[3]) + (yhone[1+stm1*6]-starimage[1])*(dydt[4+stm1*6]-dstarimagedt[4]);
+ 
+ 
+            zs = yhone[2+stm1*6]/CAUPD;
+            zp = 0.0;
+            zb = baryc[2]/CAUPD;
+            zb2 = baryc2[2]/CAUPD;
+            zs -= zb;
+            zp -= zb2;
+            dt1 = zs;
+            dt2 = -zp;
+            dt = dt1+dt2;
+            
+            tstep = - dp[st1][stm1]/ddpdt;
+            gsl_odeiv_step_apply (s, thone, tstep, yhone, yerrhone, NULL, NULL, &sys);
+            seteq(npl, yhonedt, yhone);
+            gsl_odeiv_step_apply (s, thone, dt, yhonedt, yerrhone, NULL, NULL, &sys);
+            thone += tstep;
+            thonedt = thone+dt;
+            ii++;
+ 
+          } while (ii<10 && fabs(tstep)>eps);
+
+          dist = sqrt( pow( (yhone[0+stm1*6]-starimage[0]), 2) + pow( (yhone[1+stm1*6]-starimage[1]), 2) ); 
+ 
+        } else {
+
+          ii=0;
+          do {
+            func (thone, yhone, dydt, npl_mu);
+            ddpdt = dydt[0+stm1*6]*dydt[0+stm1*6] + dydt[1+stm1*6]*dydt[1+stm1*6] + yhone[0+stm1*6]*dydt[3+stm1*6] + yhone[1+stm1*6]*dydt[4+stm1*6];
+            tstep = - dp[st1][stm1] / ddpdt;
+            gsl_odeiv_step_apply (s, thone, tstep, yhone, yerrhone, dydt, NULL, &sys);
+            thone += tstep;
+            dp[st1][stm1]=yhone[0+stm1*6]*yhone[3+stm1*6]+yhone[1+stm1*6]*yhone[4+stm1*6];
+            ii++;
+          } while (ii<5 && fabs(tstep)>eps);
+          
+          dist = sqrt(pow(yhone[0+stm1*6],2)+pow(yhone[1+stm1*6],2));
+
+        }
+
+        dp[st1][stm1]=y[0+stm1*6]*y[3+stm1*6]+y[1+stm1*6]*y[4+stm1*6];
+
+        if (dist < 2.0*((rstar + rstar*rad[stm1])*RSUNAU)) {
+
+          transitcount[st1][0] -= 1;  // Update the transit number. 
+
+          if (LTE) {
+            for (j=0; j<6; j++) {
+              baryc[j] = 0.;
+              baryc2[j] = 0.;
+              for (i=0; i<npl; i++) {
+                baryc[j] += yhone[j+i*6]*mu[i+1];
+                baryc2[j] += yhonedt[j+i*6]*mu[i+1];
+              }
+              baryc[j] /= mtot;
+              baryc2[j] /= mtot;
+ 
+              starimage[j] = -baryc2[j]+baryc[j];
+            }
+            zs = yhone[2+stm1*6]/CAUPD;
+            zp = 0.0;
+            zb = baryc[2]/CAUPD;
+            zb2 = baryc2[2]/CAUPD;
+            zs -= zb;
+            zp -= zb2;
+            dt1 = zs;
+            dt2 = -zp;
+            dt = dt1+dt2;
+            
+            dist = sqrt( pow( yhone[0+stm1*6] - starimage[0], 2) + pow( yhone[1+stm1*6] - starimage[1], 2) ); 
+            vtrans = sqrt( pow( yhone[3+stm1*6] - starimage[3], 2) + pow( yhone[4+stm1*6] - starimage[4], 2) ); 
+          } else {
+            dist = sqrt(pow(yhone[0+stm1*6],2)+pow(yhone[1+stm1*6],2));
+            vtrans = sqrt(pow(yhone[3+stm1*6],2)+pow(yhone[4+stm1*6],2)); 
+            zs=0;
+            zb2=0;
+          }
+
+          t2 = thone + zs;
+
+#if ( demcmc_compile == 0 )//|| demcmc_compile == 3) 
+          fprintf(directory[st1][0], "%6d  %.18e  %.10e  %.10e\n", transitcount[st1][0], t2, dist, vtrans);
+#endif
+
+          double vplanet, toffset, tinit, tfin;
+          long ic, nc, ac;
+          double thone0, hold;
+
+          vplanet = fmax(vtrans, 0.0001);
+          toffset = offsetmult*(rstar*(1+rad[stm1]))*RSUNAU/vplanet;
+          toffset = fmin(toffset, offsetmin);
+          tinit = t2 - toffset;
+          tfin = t2 + toffset;
+          ic=0;
+          while (ic<(kk-1) && timelist[ic]<tinit) {
+            ic++;
+          } 
+          nc=0;
+          while ((ic+nc)<(kk-1) && timelist[ic+nc]<tfin) {
+            nc++;
+          }
+          seteq(npl, yhone0, yhone);
+          thone0=thone;
+          hold=h;
+
+          for (ac=0; ac<nc; ac++) {
+
+            if (whereplanets[st1][ic+ac][0] == 0) { // i.e. if this body's location not already computed
+ 
+              int tnum;
+              double tcur, ts1, ts2;
+
+              tnum = numplanets[st1][ic+ac];
+              // stellar time 
+              tcur = timelist[ic+ac] - zs;
+              ts1 = (tcur-thone);
+              if (fabs(ts1) > fabs(h)) {
+                h = fabs(h)*fabs(ts1)/ts1;
+              } else {
+                h = ts1;
+              }
+              while ( !(status!=GSL_SUCCESS) && !(dbleq(tcur, thone)) ){
+                status = gsl_odeiv_evolve_apply(e, c, s, &sys, &thone, tcur, &h, yhone); 
+              }
+              if (LTE) {
+                ts2 = (tcur+dt)-thonedt;
+                if (fabs(ts2) > fabs(h)) {
+                  h = fabs(h)*fabs(ts2)/ts2;
+                } else {
+                  h = ts2;
+                }
+                while ( !(status!=GSL_SUCCESS) && !(dbleq(tcur+dt, thonedt)) ){
+                  status = gsl_odeiv_evolve_apply(e, c, s, &sys, &thonedt, tcur+dt, &h, yhonedt); 
+                }
+              }
+              if (status != GSL_SUCCESS) {
+                printf("Big problem\n");
+                exit(0);
+              }
+  
+              if (LTE) {
+                for (j=0; j<6; j++) {
+                  baryc[j] = 0.;
+                  baryc2[j] = 0.;
+                  for (i=0; i<npl; i++) {
+                    baryc[j] += yhone[j+i*6]*mu[i+1];
+                    baryc2[j] += yhonedt[j+i*6]*mu[i+1];
+                  }
+                  baryc[j] /= mtot;
+                  baryc2[j] /= mtot;
+     
+                  starimage[j] = -baryc2[j]+baryc[j];
+                }
+                zs = yhone[2+stm1*6]/CAUPD;
+                zp = 0.0;
+                zb = baryc[2]/CAUPD;
+                zb2 = baryc2[2]/CAUPD;
+                zs -= zb;
+                zp -= zb2;
+                dt1 = zs;
+                dt2 = -zp;
+                dt = dt1+dt2;
+              }
+ 
+              if (yhone[2+stm1*6] > 0.0) {
+
+                whereplanets[st1][ic+ac][0] = 1;
+                tranarray[st1][ic+ac][tnum][0] = rstar*RSUNAU; 
+                numplanets[st1][ic+ac]+=1;
+
+                if (LTE) {
+
+                  tranarray[st1][ic+ac][tnum][1] = -(yhone[0+stm1*6]-starimage[0]);
+                  tranarray[st1][ic+ac][tnum][2] = -(yhone[1+stm1*6]-starimage[1]);
+
+                } else {
+
+                  tranarray[st1][ic+ac][tnum][1] = -yhone[0+stm1*6];
+                  tranarray[st1][ic+ac][tnum][2] = -yhone[1+stm1*6];
+
+                }
+              } 
+            }
+          }
+          seteq(npl, yhone, yhone0);
+          thone=thone0;
+          h=hold;
+        } 
+      }
+      for (pl=0; pl<npl; pl++) {
+        if (pl != stm1) {
+             dpold[st1][pl]=dp[st1][pl];
+          dp[st1][pl]=(y[0+pl*6]-y[0+stm1*6])*(y[3+pl*6]-y[3+stm1*6]) + (y[1+pl*6]-y[1+stm1*6])*(y[4+pl*6]-y[4+stm1*6]);
+          ps2=pow((y[0+pl*6]-y[0+stm1*6]),2) + pow((y[1+pl*6]-y[1+stm1*6]),2);
+
+          if (dp[st1][pl]*dpold[st1][pl] <= 0 && ps2 < dist2/dist2divisor && y[2+stm1*6]>y[2+pl*6] && brights > 1) { 
+    
+                seteq(npl, yhone, y);
+                thone = t;
+    
+            if (LTE) {
+              ii=0;
+              dt = -(yhone[2+pl*6] - yhone[2+stm1*6]) / CAUPD;
+              seteq(npl, yhonedt, yhone);
+              gsl_odeiv_step_apply (s, thone, dt, yhonedt, yerrhone, NULL, NULL, &sys);
+              thonedt = thone+dt;
+     
+              do {
+                func(thone, yhone, dydt, npl_mu);
+                func(thonedt, yhonedt, dydtdt, npl_mu);
+     
+                for (j=0; j<6; j++) {
+                  baryc[j] = 0.;
+                  baryc2[j] = 0.;
+                  dbarycdt[j] = 0.;
+                  dbarycdt2[j] = 0.;
+                  for (i=0; i<npl; i++) {
+                    baryc[j] += yhone[j+i*6]*mu[i+1];
+                    baryc2[j] += yhonedt[j+i*6]*mu[i+1];
+                    dbarycdt[j] += dydt[j+i*6]*mu[i+1];
+                    dbarycdt2[j] += dydtdt[j+i*6]*mu[i+1];
+                  }
+                  baryc[j] /= mtot;
+                  baryc2[j] /= mtot;
+                  dbarycdt[j] /= mtot;
+                  dbarycdt2[j] /= mtot;
+    
+                  //starimage should really be starshift here
+                  starimage[j] = baryc2[j]-baryc[j];
+                  dstarimagedt[j] = dbarycdt2[j]-dbarycdt[j];
+                }
+    
+                dp[st1][pl] = (yhonedt[0+pl*6]-yhone[0+stm1*6]-starimage[0])*(yhonedt[3+pl*6]-yhone[3+stm1*6]-starimage[3]) + (yhonedt[1+pl*6]-yhone[1+stm1*6]-starimage[1])*(yhonedt[4+pl*6]-yhone[4+stm1*6]-starimage[4]);
+                double ddpdt = (dydtdt[0+pl*6]-dydt[0+stm1*6]-dstarimagedt[0])*(dydtdt[0+pl*6]-dydt[0+stm1*6]-dstarimagedt[0]) + (dydtdt[1+pl*6]-dydt[1+stm1*6]-dstarimagedt[1])*(dydtdt[1+pl*6]-dydt[1+stm1*6]-dstarimagedt[1]) + (yhonedt[0+pl*6]-yhone[0+stm1*6]-starimage[0])*(dydtdt[3+pl*6]-dydt[3+stm1*6]-dstarimagedt[3]) + (yhonedt[1+pl*6]-yhone[1+stm1*6]-starimage[1])*(dydt[4+pl*6]-dydt[4+stm1*6]-dstarimagedt[4]);
+     
+     
+                zs = yhone[2+stm1*6]/CAUPD;
+                zp = yhonedt[2+pl*6]/CAUPD;
+                zb = baryc[2]/CAUPD;
+                zb2 = baryc2[2]/CAUPD;
+                zs -= zb;
+                zp -= zb2;
+                dt1 = zs;
+                dt2 = -zp;
+                dt = dt1+dt2;
+                
+                tstep = - dp[st1][pl]/ddpdt;
+                gsl_odeiv_step_apply (s, thone, tstep, yhone, yerrhone, NULL, NULL, &sys);
+                seteq(npl, yhonedt, yhone);
+                gsl_odeiv_step_apply (s, thone, dt, yhonedt, yerrhone, NULL, NULL, &sys);
+                thone += tstep;
+                thonedt = thone+dt;
+                ii++;
+     
+              } while (ii<10 && fabs(tstep)>eps);
+                
+              dist = sqrt( pow( (yhonedt[0+pl*6]-yhone[0+stm1*6]-starimage[0]), 2) + pow( (yhonedt[1+pl*6]-yhone[1+stm1*6]-starimage[1]), 2) ); 
+     
+            } else {
+    
+              ii=0;
+              do {
+                func (thone, yhone, dydt, npl_mu);
+                //ddpdt = dydt[0+pl*6]*dydt[0+pl*6] + dydt[1+pl*6]*dydt[1+pl*6] + yhone[0+pl*6]*dydt[3+pl*6] + yhone[1+pl*6]*dydt[4+pl*6];
+                ddpdt = (dydt[0+pl*6]-dydt[0+stm1*6])*(dydt[0+pl*6]-dydt[0+stm1*6]) + (dydt[1+pl*6]-dydt[1+stm1*6])*(dydt[1+pl*6]-dydt[1+stm1*6]) + (yhone[0+pl*6]-yhone[0+stm1*6])*(dydt[3+pl*6]-dydt[3+stm1*6]) + (yhone[1+pl*6]-yhone[1+stm1*6])*(dydt[4+pl*6]-dydt[4+stm1*6]);
+                tstep = - dp[st1][pl] / ddpdt;
+                gsl_odeiv_step_apply (s, thone, tstep, yhone, yerrhone, dydt, NULL, &sys);
+                thone += tstep;
+                    //dp[st1][pl]=yhone[0+pl*6]*yhone[3+pl*6]+yhone[1+pl*6]*yhone[4+pl*6];
+                dp[st1][pl]=(yhone[0+pl*6]-yhone[0+stm1*6])*(yhone[3+pl*6]-yhone[3+stm1*6]) + (yhone[1+pl*6]-yhone[1+stm1*6])*(yhone[4+pl*6]-yhone[4+stm1*6]);
+                ii++;
+              } while (ii<5 && fabs(tstep)>eps);
+                
+              //dist = sqrt( pow( (yhonedt[0+pl*6]-yhone[0+stm1*6]), 2) + pow( (yhonedt[1+pl*6]-yhone[1+stm1*6]), 2) ); 
+              dist = sqrt( pow( (yhone[0+pl*6]-yhone[0+stm1*6]), 2) + pow( (yhone[1+pl*6]-yhone[1+stm1*6]), 2) ); 
+    
+            }
+    
+            dp[st1][pl]=(y[0+pl*6]-y[0+stm1*6])*(y[3+pl*6]-y[3+stm1*6]) + (y[1+pl*6]-y[1+stm1*6])*(y[4+pl*6]-y[4+stm1*6]);
+    
+            if (dist < 2.0*((rstar*rad[stm1] + rstar*rad[pl])*RSUNAU)) {
+    
+              transitcount[st1][pl+1] -= 1;  // Update the transit number. 
+    
+              if (LTE) {
+                for (j=0; j<6; j++) {
+                  baryc[j] = 0.;
+                  baryc2[j] = 0.;
+                  for (i=0; i<npl; i++) {
+                    baryc[j] += yhone[j+i*6]*mu[i+1];
+                    baryc2[j] += yhonedt[j+i*6]*mu[i+1];
+                  }
+                  baryc[j] /= mtot;
+                  baryc2[j] /= mtot;
+     
+                  starimage[j] = baryc2[j]-baryc[j];
+                }
+                zs = yhone[2+stm1*6]/CAUPD;
+                zp = yhonedt[2+pl*6]/CAUPD;
+                zb = baryc[2]/CAUPD;
+                zb2 = baryc2[2]/CAUPD;
+                zs -= zb;
+                zp -= zb2;
+                dt1 = zs;
+                dt2 = -zp;
+                dt = dt1+dt2;
+                
+                dist = sqrt( pow( (yhonedt[0+pl*6]-yhone[0+stm1*6]-starimage[0]), 2) + pow( (yhonedt[1+pl*6]-yhone[1+stm1*6]-starimage[1]), 2) ); 
+                vtrans = sqrt(pow(yhonedt[3+pl*6]-yhone[3+stm1*6] - starimage[3],2) + pow(yhonedt[4+pl*6]-yhone[4+stm1*6] - starimage[4],2)); 
+              } else {
+                //dist = sqrt( pow( (yhonedt[0+pl*6]-yhone[0+stm1*6]), 2) + pow( (yhonedt[1+pl*6]-yhone[1+stm1*6]), 2) ); 
+                //vtrans = sqrt(pow(yhonedt[3+pl*6]-yhone[3+stm1*6], 2) + pow(yhonedt[4+pl*6]-yhone[4+stm1*6], 2)); 
+                dist = sqrt( pow( (yhone[0+pl*6]-yhone[0+stm1*6]), 2) + pow( (yhone[1+pl*6]-yhone[1+stm1*6]), 2) ); 
+                vtrans = sqrt(pow(yhone[3+pl*6]-yhone[3+stm1*6], 2) + pow(yhone[4+pl*6]-yhone[4+stm1*6], 2)); 
+                zs=0;
+                zb2=0;
+              }
+    
+              t2 = thone + zs;
+    
+#if ( demcmc_compile == 0 )//|| demcmc_compile == 3) 
+              fprintf(directory[st1][pl+1], "%6d  %.18e  %.10e  %.10e\n", transitcount[st1][pl+1], t2, dist, vtrans);
+#endif
+
+
+              double vplanet, toffset, tinit, tfin;
+              long ic, nc, ac;
+              double thone0, hold;
+
+              vplanet = fmax(vtrans, 0.0001);
+              toffset = offsetmult*(rstar*(rad[stm1]+rad[pl]))*RSUNAU/vplanet;
+              toffset = fmin(toffset, offsetminout);
+              tinit = t2 - toffset;
+              tfin = t2 + toffset;
+              ic=0;
+              while (ic<(kk-1) && timelist[ic]<tinit) ic++; 
+              nc=0;
+              while ((ic+nc)<(kk-1) && timelist[ic+nc]<tfin) nc++;
+
+              seteq(npl, yhone0, yhone);
+              thone0=thone;
+              hold=h;
+
+              //This is fairly inexact for first time if yhone_Z is changing considerably Can try to fix this in future versions. 
+              for (ac=0; ac<nc; ac++) {
+                if (whereplanets[st1][ic+ac][pl+1] == 0) { // i.e. if this body's location not already computed
+
+                  int tnum;
+                  double tcur, ts1, ts2;
+
+                  tnum = numplanets[st1][ic+ac];
+                  tcur = timelist[ic+ac] - zs;
+                  ts1 = (tcur-thone);
+                  if (fabs(ts1) > fabs(h)) {
+                    h = fabs(h)*fabs(ts1)/ts1;
+                  } else {
+                    h = ts1;
+                  }
+                  while ( !(status!=GSL_SUCCESS) && !(dbleq(tcur, thone)) ){
+                    status = gsl_odeiv_evolve_apply(e, c, s, &sys, &thone, tcur, &h, yhone); 
+                  }
+                  if (LTE) {
+                    ts2 = (tcur+dt)-thonedt;
+                    if (fabs(ts2) > fabs(h)) {
+                      h = fabs(h)*fabs(ts2)/ts2;
+                    } else {
+                      h = ts2;
+                    }
+                    while ( !(status!=GSL_SUCCESS) && !(dbleq(tcur+dt, thonedt)) ){
+                      status = gsl_odeiv_evolve_apply(e, c, s, &sys, &thonedt, tcur+dt, &h, yhonedt); 
+                    }
+                  }
+                  if (status != GSL_SUCCESS) {
+                    printf("Big problem\n");
+                    exit(0);
+                  }
+      
+                  if (LTE) {
+                    for (j=0; j<6; j++) {
+                      baryc[j] = 0.;
+                      baryc2[j] = 0.;
+                      for (i=0; i<npl; i++) {
+                        baryc[j] += yhone[j+i*6]*mu[i+1];
+                        baryc2[j] += yhonedt[j+i*6]*mu[i+1];
+                      }
+                      baryc[j] /= mtot;
+                      baryc2[j] /= mtot;
+         
+                      starimage[j] = baryc2[j]-baryc[j];
+                    }
+         
+                    zs = yhone[2+stm1*6]/CAUPD;
+                    zp = yhonedt[2+pl*6]/CAUPD;
+                    zb = baryc[2]/CAUPD;
+                    zb2 = baryc2[2]/CAUPD;
+                    zs -= zb;
+                    zp -= zb2;
+                    dt1 = zs;
+                    dt2 = -zp;
+                    dt = dt1+dt2;
+                  }
+ 
+                  if (yhone[2+stm1*6] > yhone[2+pl*6]) {
+
+                    whereplanets[st1][ic+ac][pl+1] = 1;
+                    numplanets[st1][ic+ac]+=1;
+                    tranarray[st1][ic+ac][tnum][0] = rad[pl]*rstar*RSUNAU;
+
+                    if (LTE) {
+
+                      tranarray[st1][ic+ac][tnum][1] = yhonedt[0+pl*6] - yhone[0+stm1*6] - starimage[0];
+                      tranarray[st1][ic+ac][tnum][2] = yhonedt[1+pl*6] - yhone[1+stm1*6] - starimage[1];
+                    
+                    } else {
+                    
+                      tranarray[st1][ic+ac][tnum][1] = yhone[0+pl*6] - yhone[0+stm1*6];
+                      tranarray[st1][ic+ac][tnum][2] = yhone[1+pl*6] - yhone[1+stm1*6];
+
+                    }
+                  }
+                } 
+              }
+
+              seteq(npl, yhone, yhone0);
+              thone=thone0;
+              h=hold;
+            }
+          }
+        }
+      }
+    }
+  }
+
+      
+
+
+
+  if (RVS) {
+    free(rvtarr);
+  }
+
+  
+#if ( demcmc_compile == 0 )//|| demcmc_compile == 3) 
+
+  for (k=0; k<brights; k++) {
+    int k1 = brightsindex[k];
+    for (i=0; i<(npl+1); i++){
+      if (i != k1) {
+        fclose(directory[k][i]);
+      }
+    }
+  }
+
+  for (k=0; k<brights; k++) {
+    free(directory[k]);
+  }
+  free(directory);
+
+#endif
+
+  
+
+  for (k=0; k <brights; k++) {
+    long kkc;
+    for (kkc=0; kkc<kk; kkc++) {
+      free(whereplanets[k][kkc]);
+    }
+    free(whereplanets[k]);
+  }
+  free(whereplanets);
+
+
+  double onetlc (int nplanets, double **rxy, double rstar, double c1, double c2); // prototype 
+
+  for (k=0; k<brights; k++) {
+    int k1 = brightsindex[k];
+    long kk1;
+    for (kk1=0; kk1<kk; kk1++) {
+      if (k==0) fluxlist[k][kk1] = onetlc(numplanets[k][kk1], tranarray[k][kk1], 1.0*rstar*RSUNAU, c1list[k1], c2list[k1]);
+      else fluxlist[k][kk1] = onetlc(numplanets[k][kk1], tranarray[k][kk1], rad[k1-1]*rstar*RSUNAU, c1list[k1], c2list[k1]);
+    }
+  }
+
+  double omdilute = 1.0-dilute;
+  long kk1;
+  for (kk1=0; kk1<kk; kk1++) {
+    netflux[kk1+1] = omdilute*brightness[0]*fluxlist[0][kk1] + dilute;
+    for (k=1; k<brights; k++) {
+      int k1 = brightsindex[k];
+      netflux[kk1+1] += omdilute*brightness[k1]*fluxlist[k][kk1];
+    }
+  }
+
+  for (k=0; k<brights; k++) {
+    long kkc; 
+    for (kkc=0; kkc<kk; kkc++) {
+      long kkcc;
+      for (kkcc=0; kkcc<posstrans; kkcc++) {
+        free(tranarray[k][kkc][kkcc]);
+      }
+      free(tranarray[k][kkc]);
+    }
+    free(tranarray[k]);    
+  }
+  free(tranarray);
+
+
+  if (cadenceswitch == 2) {
+    if (OOO) {
+      long q;
+      double *tclist = malloc((2*sofd)*kk); 
+      for (q=0; q<kk; q++) {
+        tclist[2*q] = (double) order[q];
+        tclist[2*q+1] = netflux[q];
+      }
+      qsort(tclist, kk, sofd*2, compare);
+      for (q=0; q<kk; q++) {
+        netflux[q] = tclist[2*q+1];
+      }
+      free(tclist);
+    }
+    free(order);
+  }
+
+  if (cadenceswitch == 1) {
+    long q;
+    for (q=0; q<kkorig; q++) {
+      double fsum=0;
+      for (k=0; k<nperbin; k++) {
+        fsum+=netflux[q*nperbin+k+1];
+      }
+      netflux[q+1] = fsum/nperbin;
+    }
+    kk /= nperbin;
+    free(timelist);
+  } else if (cadenceswitch == 2) {
+    long q;
+    long lccount = 0;
+    long sccount = 0;
+
+    for (q=0; q<kkorig; q++) {
+      if (cadencelist[q] == 0) {
+        netflux[q+1] = netflux[sccount+lccount*nperbin+1];
+        sccount++;
+      } else {
+        double fsum=0;
+        for (k=0; k<nperbin; k++) {
+          fsum+=netflux[sccount+lccount*nperbin+k+1];
+        }
+        netflux[q+1] = fsum/nperbin;
+        lccount++;
+      }
+    }
+    kk = kkorig;
+    free(timelist);
+  }
+
+  netflux[0]= (double) kk;
+  tmte[2]=&netflux[0];
+
+  
+  for (k=0; k<brights; k++) {
+    free(dp[k]); free(dpold[k]);
+  }  
+  free(dp); free(dpold);
+
+
+  for (k=0; k<brights; k++) {
+    free(fluxlist[k]);
+  }
+  free(fluxlist);
+  //Do not free netflux as it is being returned!!
+
+
+  for (k=0; k<brights; k++) {
+    free(transitarr[k]);
+    free(transitcount[k]);
+    free(numplanets[k]);
+  }
+  free(transitarr);
+  free(ntransits);
+  free(transitcount);
+  free(numplanets);
+  free(brightsindex);
+
+  free(rad); 
+
+  gsl_odeiv_evolve_free(e);
+  gsl_odeiv_control_free(c);
+  gsl_odeiv_step_free(s);
+
+
+
+  int tele;
+  int maxteles=10;
+  double *rvoffset;
+  rvoffset = malloc(maxteles*sofd);
+  if (RVS) {
+    // Compute RV offset
+    double rvdiff;
+    long vvw;
+    double weight;
+
+    long vvt=1;
+    tele=0;
+    while (vvt<(vv+1)) {
+      double numerator = 0;
+      double denominator = 0;
+      for (vvw=1; vvw<(vv+1); vvw++) {
+        if ( (int) tve[4][vvw] == tele ) {
+          rvdiff = rvarr[vvw] - tve[1][vvw];
+          weight = 1.0 / pow(tve[2][vvw], 2);
+          numerator += rvdiff*weight;
+          denominator += weight;
+        }
+      }
+      rvoffset[tele] = numerator/denominator;
+      for (vvw=1; vvw<(vv+1); vvw++) {
+        if ( (int) tve[4][vvw] == tele ) {
+          rvarr[vvw] -= rvoffset[tele];
+          vvt+=1;
+        }
+      }
+      tele+=1;
+    }
+  }
+
+
+
+
+  double **rvtmte = malloc(4*sofds);
+
+  rvtmte[0] = &tve[0][0];
+  rvtmte[1] = &tve[1][0];
+  rvtmte[3] = &tve[2][0];
+  rvtmte[2] = rvarr;
+
+
+#if (demcmc_compile==0)
+
+  char tmtefstr[1000];
+  strcpy(tmtefstr, "lc_");
+  strcat(tmtefstr, OUTSTR);
+  strcat(tmtefstr, ".lcout");
+  FILE *tmtef = fopen(tmtefstr, "a");
+  long ijk;
+  if (CADENCESWITCH==2) {
+    for (ijk=1; ijk<=kk; ijk++) {
+      fprintf(tmtef, "%.12lf %.12lf %.12lf %.12lf %i\n", tmte[0][ijk], tmte[1][ijk], tmte[2][ijk], tmte[3][ijk], cadencelist[ijk-1]);
+    }
+  } else {
+    for (ijk=1; ijk<=kk; ijk++) {
+      fprintf(tmtef, "%lf %lf %lf %lf\n", tmte[0][ijk], tmte[1][ijk], tmte[2][ijk], tmte[3][ijk]);
+    }
+  }
+  fclose(tmtef);// = openf(tmtstr,"w");
+
+  if (RVS) {
+    for (i=0; i<nbodies; i++) {
+      if (RVARR[i]) {
+        char rvtmtefstr[1000];
+        char num[10];
+        strcpy(rvtmtefstr, "rv");
+        sprintf(num, "%01i", i);
+        strcat(rvtmtefstr, num);
+        strcat(rvtmtefstr, "_");
+        strcat(rvtmtefstr, OUTSTR);
+        strcat(rvtmtefstr, ".rvout");
+        FILE *rvtmtef = fopen(rvtmtefstr, "a");
+        for (ijk=1; ijk<vv+1; ijk++) {
+          if ( ((int) tve[3][ijk]) == i) {
+            fprintf(rvtmtef, "%lf\t%e\t%e\t%e\t%i\n", rvtmte[0][ijk], rvtmte[1][ijk]/MPSTOAUPD, rvtmte[2][ijk]/MPSTOAUPD, rvtmte[3][ijk]/MPSTOAUPD, (int) tve[4][ijk]);
+          }
+        }
+        int l;
+        for (l=0; l<tele; l++) fprintf(rvtmtef, "RV offset %i = %lf\n", l, rvoffset[l]/MPSTOAUPD);
+        fclose(rvtmtef);// = openf(tmtstr,"w");
+      }
+    }   
+  }
+
+
+#endif
+
+  free(rvoffset);
+
+  double ***fl_rv = malloc(2*sizeof(double**));
+  fl_rv[0] = tmte;
+  fl_rv[1] = rvtmte;
+
+  return fl_rv;
+
+}
 
 
 // Read the formatted input file
