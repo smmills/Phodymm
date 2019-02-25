@@ -3,14 +3,6 @@
 ## Requirements
 
 This code requires: 
-<<<<<<< HEAD
-1. GSL (gnu scientific library - https://www.gnu.org/software/gsl/)
-2. celerite (https://github.com/dfm/celerite)
-
-If you are using the demcmc rather than just running the forward model, it also requires:
-3. MPI (https://www.open-mpi.org)
-
-=======
 
   1. GSL (gnu scientific library - https://www.gnu.org/software/gsl/)
 
@@ -21,7 +13,6 @@ If you are using the demcmc rather than just running the forward model, it also 
 [OPTIONAL] If you wish to use Gaussian processes in the fit, it requires:
 
   3. celerite (https://github.com/dfm/celerite) 
->>>>>>> nomulti
 
 ## Running the model
 
@@ -30,12 +21,6 @@ After those are installed, you may compile Phodymm from source using:
 $ g++ -w -O3 -o lcout -I/yourpathto/celerite/cpp/include -I/yourpathto/celerite/cpp/lib/eigen_3.3.3 -lm -lgsl -lgslcblas -fpermissive phodymm.cpp
 ```
 where you would replace "yourpathto" with the path to your celerite install.
-<<<<<<< HEAD
-The `-lm` `-lgsl` and `-lgslcblas` flags should link the compiler to your math libraries (including gsl)
-
-This generates an executable called `lcout` (short for light-curve output).
-You may use it to run an N-body model given a data file, input file, and initial conditions file.
-=======
 Or, if you are not using celerite for GPs, you must change the second line from 
 ```#define celerite_compile 1```
 to 
@@ -61,10 +46,6 @@ to
 
 Then recompile with
 ```
-<<<<<<< HEAD
-mpic++ -w -Ofast -o demcmc -I/yourpathto/celerite/celerite/cpp/include -I/yourpathto/celerite/celerite/cpp/lib/eigen_3.3.3 -lm -lgsl -lgslcblas -lmpi -fpermissive phodymm.cpp
-```
-=======
 $ mpic++ -w -Ofast -o demcmc -I/yourpathto/celerite/celerite/cpp/include -I/yourpathto/celerite/celerite/cpp/lib/eigen_3.3.3 -lm -lgsl -lgslcblas -lmpi -fpermissive phodymm.cpp
 ```
 or, if you are not using celerite, on line 2 set:
@@ -74,7 +55,6 @@ and then compile with:
 $ mpic++ -w -Ofast -o demcmc -lm -lgsl -lgslcblas -lmpi -fpermissive phodymm.cpp
 ```
 
->>>>>>> nomulti
 
 This will create an executable called `demcmc` which can be used to run a differential evolution MCMC (DEMCMC). 
 It is recommended you run the demcmc executable on a computing cluster. Some example scripts to run the DEMCMC are included in 
@@ -154,9 +134,6 @@ This file is read in by the C code and must be in the exact format as the exampl
    ```
    Where T0 is the time of conjunction of the planet and the star, i is the incliation, Omega is the nodal angle, and omega is the argument of periastron with the coordinate system such that the sky plane is 0. This initial condition is transformed into the basis selected in the input file before fitting (e.g. {e, omega} -> {sqrt(e)*sin(omega), sqrt(e)*cos(omega)).   
    
-<<<<<<< HEAD
-   Planets should be entered in increasing order of orbital period.  
-=======
    Planets should be entered in increasing order of orbital period. 
 
    Other options for xyzflag are 1 (Jacobian Cartesian coordinates), 2 (Stellar-centric Cartesian coordinates), or 3 (barycentric Cartesian Coordinates) with format
@@ -176,7 +153,6 @@ This file is read in by the C code and must be in the exact format as the exampl
    [Planet Label] \t  [period (d)] \t [T0 (d)] \t [sqrt(e)\*cos(omega)] \t [sqrt(e)\*sin(omega)] \t [i (deg)] \t [Omega (deg)] \t [Mass] \t [Rp/Rstar]
    ```
    although this may vary depending on your setup in the .in file. 
->>>>>>> nomulti
 
 
 4. [Optional] Radial Velocity Dataset
@@ -187,34 +163,23 @@ This file is read in by the C code and must be in the exact format as the exampl
    ```
    The time series must have the same 0 point as the flux time. The telescope number is an integer index starting from 0 indentify each unique telescope used for observations. This information is used to determine different constant RV offsets for different telescopes, and allows for different RV jitters for different telescopes. 
 
-<<<<<<< HEAD
-   See `example_planets/?` for example RV data usage. 
-=======
    See `example_planets/Kepler-15` or `example_planets/Kepler-18` for example RV data usage. 
->>>>>>> nomulti
 
 
 5. [Optional, `demcmc` only] Restart Files
 
-<<<<<<< HEAD
-   If a demcmc run is stopped it may be resumed from the last recored generation by passing `demcmc` additional arguments that specify the location of "restart files." These files include the current state of the MCMC chain, current MCMC scaling factor, and the best-fit solution found so far. These files can be generated from the ends of the MCMC output files #1-3 as described below. An example script to automatically generate them correctly is included in `example_planets/Kepler-36/restart.sh` 
-=======
    If a demcmc run is stopped it may be resumed from the last recorded generation by passing `demcmc` additional arguments that specify the location of "restart files." These files include the current state of the MCMC chain, current MCMC scaling factor, and the best-fit solution found so far. These files can be generated from the ends of the MCMC output files #1-3 as described below. An example script to automatically generate them correctly is included in `example_planets/restart_script/restart.sh`. It should be copied to the directory where the MCMC was run, and then invoked with 
    ```
    ./restart.sh demcmc_runscript.sh NAME.in
    ``` 
    and then the MCMC may be restarted by running the generated `demcmc_runscript.sh.res.sh` file. 
->>>>>>> nomulti
    
 
 
 ### Forward Model (`lcout`) Output Files
 
-<<<<<<< HEAD
-=======
 Note: Most of the output files append to existing files instead of overwriting to avoid accidental erasure. To make sure your files don't contain duplicate data sets, it is recommended you start from a clean directory or rename the run for each execution of `lcout` or `demcmc`. 
 
->>>>>>> nomulti
 1. Lightcurve file (lc_NAME.lcout), where NAME is the name specified in the input file.  
    
    This file lists the times of output and theoretical output as well as the measured flux and uncertainties. Useful for plotting the best fit.
@@ -222,11 +187,7 @@ Note: Most of the output files append to existing files instead of overwriting t
    ```
    [time (days)] \t [measured flux (normalized)] \t [model flux (normalized)] \t [measured uncertainty (normalized)]
    ```
-<<<<<<< HEAD
-2. Transit times files (tbv_XX_XX.out), where the first XX is the body being transited and the second XX is the body doing the transiting. Indexes are 00=star, 01=1st planet, 02= 2nd planet, etc.  
-=======
 2. Transit times files (tbv_XX_YY.out), where XX is the body being transited and YY is the body doing the transiting. Indexes are 00=star, 01=1st planet, 02= 2nd planet, etc.  
->>>>>>> nomulti
 
    4 columns:
    ```
@@ -239,9 +200,6 @@ Note: Most of the output files append to existing files instead of overwriting t
    *  aei_NAME.aeiout
    Descriptions within these files specify the coordinate system used for each entry within. 
 
-<<<<<<< HEAD
-4. [Optional] Celerite Continuum Fit  
-=======
 4. [Optional] RV Output Files, (rv_XX_NAME.rvout), where XX is the index of the body for which RVs are reported (00 = the central star) and NAME is the run name. 
    Format is: 
    ```
@@ -250,19 +208,14 @@ Note: Most of the output files append to existing files instead of overwriting t
    The calculated RV offset for each telescope is printed at the bottom of the file.
 
 5. [Optional] Celerite Continuum Fit  
->>>>>>> nomulti
 
    This file shows the Gaussian Process the celerite fit to the continuum if a celerite fit was chosen. It's format is 
    ```
    [time] [flux]
    ```
-<<<<<<< HEAD
- 
-=======
 
 6. [Optional] Positions of the Bodies at time = PRINTEPOCH, named xyz_adjusted_NAME.xyzout, where NAME is the run name. Similar to xyz_NAME.xyzout, but at a different epoch time, and only one coordinate system is given. 
 
->>>>>>> nomulti
 
 ### MCMC Fit (`demcmc`) Output Files
 
@@ -283,14 +236,6 @@ Note: Most of the output files append to existing files instead of overwriting t
 
 4. Diagnostic Output
 
-<<<<<<< HEAD
-   Some diagnostic output is saved in `demcmc.stdout` and/or the `outf` subdirectory, depending on how the run is executed. 
- 
-
-
-
-  
-=======
    Some diagnostic output is saved in `demcmc.stdout` and/or the `outf` subdirectory, depending on how the run is executed. If the run crashes or hangs, these are the best places to look for help.  
  
 
@@ -343,4 +288,3 @@ Simple plotting and analysis tools written in Python are available in `example_p
 
 
 
->>>>>>> nomulti

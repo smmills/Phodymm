@@ -1,9 +1,5 @@
-<<<<<<< HEAD:phodymm.cpp
-#define demcmc_compile 1
-=======
 #define demcmc_compile 0
 #define celerite_compile 1
->>>>>>> nomulti:phodymm.cpp
 
 // To compile lcout:
 // make sure demcmc_compile is defined as 0
@@ -2432,9 +2428,6 @@ int getinput(char fname[]) {
   }
 
   PPERWALKER = NPL*PPERPLAN + PSTAR;
-<<<<<<< HEAD:phodymm.cpp
-
-=======
   int nfree = PPERWALKER-nfixed;
 #if (demcmc_compile == 1)
   if (NWALKERS <= nfree) {
@@ -2443,7 +2436,6 @@ int getinput(char fname[]) {
     printf("         The DEMCMC algorithm may fail to perform correctly.\n");
   } 
 #endif
->>>>>>> nomulti:phodymm.cpp
   fclose(inputf);
   return 0;
 }
@@ -3894,46 +3886,28 @@ double *binnedlc ( double *times, int *cadences, long ntimes, double binwidth, i
         double binnedflux=0;
         if (cadences[n] == 1) {
           for (nn=0; nn<nperbin; nn++) {
-<<<<<<< HEAD:phodymm.cpp
-            binnedflux += mttr_flux_general(system, nplanets+1, g0, g1, g2);// /nflux; 
-            if (nn < (nperbin-1)) {
-=======
             binnedflux += onetlc (nplanets, system, rstarau, c1, c2);
             //if (nn < (nperbin-1)) {
->>>>>>> nomulti:phodymm.cpp
               double t_cur = fulltimelist[(n-nlong) + nlong*nperbin + nn];
               double t_next = fulltimelist[(n-nlong) + nlong*nperbin + nn + 1];
               for (i=0; i<nplanets; i++) {
                 system[i+1].x0 += transitarr[i][3]*(t_next-t_cur)/rstarau;
                 system[i+1].y0 += transitarr[i][4]*(t_next-t_cur)/rstarau;
               }
-<<<<<<< HEAD:phodymm.cpp
-            }
-=======
             //}
->>>>>>> nomulti:phodymm.cpp
           }
           binnedflux = binnedflux/nperbin;
           nlong++;
         } else {
-<<<<<<< HEAD:phodymm.cpp
-          binnedflux += mttr_flux_general(system, nplanets+1, g0, g1, g2);// /nflux; 
-          if (nn < (nperbin-1)) {
-=======
           binnedflux += onetlc (nplanets, system, rstarau, c1, c2);
           //if (nn < (nperbin-1)) {
->>>>>>> nomulti:phodymm.cpp
             double t_cur = fulltimelist[(n-nlong) + nlong*nperbin];
             double t_next = fulltimelist[(n-nlong) + nlong*nperbin + 1];
             for (i=0; i<nplanets; i++) {
               system[i+1].x0 += transitarr[i][3]*(t_next-t_cur)/rstarau;
               system[i+1].y0 += transitarr[i][4]*(t_next-t_cur)/rstarau;
             }
-<<<<<<< HEAD:phodymm.cpp
-          }
-=======
           //}
->>>>>>> nomulti:phodymm.cpp
         }
         fluxlist[n] = binnedflux;
       }
@@ -3942,24 +3916,15 @@ double *binnedlc ( double *times, int *cadences, long ntimes, double binwidth, i
         int nn;
         double binnedflux=0;
         for (nn=0; nn<nperbin; nn++) {
-<<<<<<< HEAD:phodymm.cpp
-          binnedflux += mttr_flux_general(system, nplanets+1, g0, g1, g2);// /nflux; 
-          if (nn < (nperbin-1)) {
-=======
           binnedflux += onetlc (nplanets, system, rstarau, c1, c2);
           //if (nn < (nperbin-1)) {
->>>>>>> nomulti:phodymm.cpp
             double t_cur = fulltimelist[n*nperbin+nn];
             double t_next = fulltimelist[n*nperbin+nn+1];
             for (i=0; i<nplanets; i++) {
               system[i+1].x0 += transitarr[i][3]*(t_next-t_cur)/rstarau;
               system[i+1].y0 += transitarr[i][4]*(t_next-t_cur)/rstarau;
             }
-<<<<<<< HEAD:phodymm.cpp
-          }
-=======
           //}
->>>>>>> nomulti:phodymm.cpp
         }
         binnedflux = binnedflux/nperbin;
         fluxlist[n] = binnedflux;
@@ -4680,40 +4645,27 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
   printf("int_in %lf, %lf, %lf, %lf\n", int_in[0][0][0], int_in[1][0][0], int_in[2][0][0], int_in[2][1][0]);
 
   double ***flux_rvs; 
-<<<<<<< HEAD:phodymm.cpp
   if (MULTISTAR) {
     flux_rvs = dpintegrator_multi(int_in, tfe, tve, cadencelist);
   } else {
     flux_rvs = dpintegrator_single(int_in, tfe, tve, nte, cadencelist);
   }
-=======
   flux_rvs = dpintegrator_single(int_in, tfe, tve, nte, cadencelist);
->>>>>>> nomulti:phodymm.cpp
   printf("Integration Complete\n");
   
   double **ttvts = flux_rvs[2];
   double **flux = flux_rvs[0];
   double **radvs = flux_rvs[1];
   double *dev = devoerr(flux);
-<<<<<<< HEAD:phodymm.cpp
-  double xisq = 0;
-=======
   double neg2loglike = 0;
->>>>>>> nomulti:phodymm.cpp
   long il;
   long maxil = (long) dev[0];
   printf("kk=%li\n", maxil);
  
   if (! CELERITE) { 
-<<<<<<< HEAD:phodymm.cpp
-    for (il=0; il<maxil; il++) xisq += dev[il+1]*dev[il+1];
-  } else { // if celerite
-    xisq = celerite_fit(flux_rvs, p, 0, 0, 1);
-=======
     for (il=0; il<maxil; il++) neg2loglike += dev[il+1]*dev[il+1];
   } else { // if celerite
     neg2loglike = celerite_fit(flux_rvs, p, 0, 0, 1);
->>>>>>> nomulti:phodymm.cpp
   }
 
   printf("pre rvjitter:\n");
@@ -4742,11 +4694,7 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
       for (il=0; il<maxil; il++) neg2loglike += rvdev[il+1]*rvdev[il+1];
       free(rvdev);
     } else { // if rvcelerite
-<<<<<<< HEAD:phodymm.cpp
-      xisq += celerite_fit(flux_rvs, p, 0, 1, 1);
-=======
       neg2loglike += celerite_fit(flux_rvs, p, 0, 1, 1);
->>>>>>> nomulti:phodymm.cpp
     }
   }
 
@@ -4780,88 +4728,11 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
   printf("post ttvjitter:\n");
   printf("neg2loglike=%lf\n", neg2loglike);
   
-//  double photoradius = int_in[3][0][0]; 
-//  if (SPECTROSCOPY) {
-<<<<<<< HEAD:phodymm.cpp
-//    if (photoradius > SPECRADIUS) xisq += pow( (photoradius - SPECRADIUS) / SPECERRPOS, 2 );
-//    else xisq += pow( (photoradius - SPECRADIUS) / SPECERRNEG, 2 );
-//  }
-//  double photomass = int_in[2][0][0]; 
-//  if (MASSSPECTROSCOPY) {
-//    if (photomass > SPECMASS) xisq += pow( (photomass - SPECMASS) / MASSSPECERRPOS, 2 );
-//    else xisq += pow( (photomass - SPECMASS) / MASSSPECERRNEG, 2 );
-//  }
-//  printf("xisqnoinc=%lf\n", xisq);
-//  if (INCPRIOR) {
-//    int i0;
-//    for (i0=0; i0<npl; i0++) {
-//      printf("%lf\n", xisq);
-//      xisq += -2.0*log( sin(p[i0*pperplan+4] *M_PI/180.) ); 
-//    }
-//  }
-//  printf("xisqnoe=%lf\n", xisq);
-=======
-//    if (photoradius > SPECRADIUS) neg2loglike += pow( (photoradius - SPECRADIUS) / SPECERRPOS, 2 );
-//    else neg2loglike += pow( (photoradius - SPECRADIUS) / SPECERRNEG, 2 );
-//  }
-//  double photomass = int_in[2][0][0]; 
-//  if (MASSSPECTROSCOPY) {
-//    if (photomass > SPECMASS) neg2loglike += pow( (photomass - SPECMASS) / MASSSPECERRPOS, 2 );
-//    else neg2loglike += pow( (photomass - SPECMASS) / MASSSPECERRNEG, 2 );
-//  }
-//  printf("neg2loglikenoinc=%lf\n", neg2loglike);
-//  if (INCPRIOR) {
-//    int i0;
-//    for (i0=0; i0<npl; i0++) {
-//      printf("%lf\n", neg2loglike);
-//      neg2loglike += -2.0*log( sin(p[i0*pperplan+4] *M_PI/180.) ); 
-//    }
-//  }
-//  printf("neg2loglikenoe=%lf\n", neg2loglike);
->>>>>>> nomulti:phodymm.cpp
-//  double* evector = malloc(npl*sofd);
-//  if (ECUTON || EPRIOR) {
-//    if (SQRTE) {
-//      int i0;
-//      for (i0=0; i0<npl; i0++) {
-//        evector[i0] = pow(sqrt( pow(p[i0*pperplan+2], 2) + pow(p[i0*pperplan+3], 2) ), 2);
-//      }
-//    } else {
-//      int i0;
-//      for (i0=0; i0<npl; i0++) {
-//        evector[i0] = sqrt( pow(p[i0*pperplan+2], 2) + pow(p[i0*pperplan+3], 2) );
-//      }
-//    }
-//  }
-//  if (EPRIOR) {
-//    int i0;
-//    for (i0=0; i0<NPL; i0++) {
-//      if (EPRIORV[i0]) {
-//        double priorprob;
-//        if (EPRIOR==1) {
-//          priorprob = rayleighpdf(evector[i0]);
-//        } else if (EPRIOR==2) {
-//          priorprob = normalpdf(evector[i0]);
-//        }
-<<<<<<< HEAD:phodymm.cpp
-//        xisq += -2.0*log( priorprob );
-=======
-//        neg2loglike += -2.0*log( priorprob );
->>>>>>> nomulti:phodymm.cpp
-//      }
-//    }
-//  }
 
-<<<<<<< HEAD:phodymm.cpp
-  xisq += compute_priors(p, 0);
-
-  printf("xisq=%lf\n", xisq);
-=======
   neg2loglike += compute_priors(p, 0);
 
   printf("post priors:\n");
   printf("neg2loglike=%lf\n", neg2loglike);
->>>>>>> nomulti:phodymm.cpp
   free(dev);
 
   if (CONVERT) {  
@@ -5106,12 +4977,8 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
     double ***int_in = dsetup2(&p0local[pperwalker*i], npl);
     //printf("Converted to XYZ\n");
     double ***flux_rvs; 
-<<<<<<< HEAD:phodymm.cpp
     if (MULTISTAR) flux_rvs = dpintegrator_multi(int_in, tfe, tve, cadencelist);
     else flux_rvs = dpintegrator_single(int_in, tfe, tve, nte, cadencelist);
-=======
-    flux_rvs = dpintegrator_single(int_in, tfe, tve, nte, cadencelist);
->>>>>>> nomulti:phodymm.cpp
     //printf("Computed Flux\n");
     double **ttvts = flux_rvs[2];
     double **flux = flux_rvs[0];
@@ -5123,11 +4990,7 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
     if (! CELERITE) { 
       for (il=0; il<maxil; il++) neg2logliketemp += dev[il+1]*dev[il+1];
     } else { // if celerite
-<<<<<<< HEAD:phodymm.cpp
-      xisqtemp = celerite_fit(flux_rvs, p0local, i, 0, 0); 
-=======
       neg2logliketemp = celerite_fit(flux_rvs, p0local, i, 0, 0); 
->>>>>>> nomulti:phodymm.cpp
     }
     double *newelist;
  
@@ -5158,11 +5021,7 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
   
   
       } else { // if rvcelerite
-<<<<<<< HEAD:phodymm.cpp
-        xisqtemp += celerite_fit(flux_rvs, p0local, i, 1, 0);
-=======
         neg2logliketemp += celerite_fit(flux_rvs, p0local, i, 1, 0);
->>>>>>> nomulti:phodymm.cpp
       } 
     }
 
@@ -5192,11 +5051,7 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
       }
     }
 
-<<<<<<< HEAD:phodymm.cpp
-    xisqtemp += compute_priors(p0local, i); 
-=======
     neg2logliketemp += compute_priors(p0local, i); 
->>>>>>> nomulti:phodymm.cpp
 
     celeritefail:
 
@@ -5356,11 +5211,7 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
         if (! CELERITE) { 
           for (il=0; il<maxil; il++) nneg2logliketemp += ndev[il+1]*ndev[il+1];
         } else { // if celerite
-<<<<<<< HEAD:phodymm.cpp
-          nxisqtemp = celerite_fit(nflux_rvs, p0local, nw, 0, 0);
-=======
           nneg2logliketemp = celerite_fit(nflux_rvs, p0local, nw, 0, 0);
->>>>>>> nomulti:phodymm.cpp
         }
         double *newelist;
         if (RVS) {
@@ -5388,11 +5239,7 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
             free(rvdev);
   
           } else { // if rvcelerite
-<<<<<<< HEAD:phodymm.cpp
-            nxisqtemp += celerite_fit(nflux_rvs, p0local, nw, 1, 0);
-=======
             nneg2logliketemp += celerite_fit(nflux_rvs, p0local, nw, 1, 0);
->>>>>>> nomulti:phodymm.cpp
           }
         }
         if (TTVCHISQ) {
@@ -5425,15 +5272,9 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
         }
        
 
-<<<<<<< HEAD:phodymm.cpp
-        nxisqtemp += compute_priors(p0local, nw);
- 
-        double xisq = nxisqtemp;
-=======
         nneg2logliketemp += compute_priors(p0local, nw);
  
         double neg2loglike = nneg2logliketemp;
->>>>>>> nomulti:phodymm.cpp
 
         free(nint_in[0][0]);
         free(nint_in[0]);
