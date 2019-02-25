@@ -1,22 +1,32 @@
+<<<<<<< HEAD:phodymm.cpp
 #define demcmc_compile 1
+=======
+#define demcmc_compile 0
+#define celerite_compile 1
+>>>>>>> nomulti:phodymm.cpp
 
 // To compile lcout:
 // make sure demcmc_compile is defined as 0
 // Compile with:
-// g++ -w -O3 -o lcout -I/home/smills/celerite/celerite/cpp/include -I/home/smills/celerite/celerite/cpp/lib/eigen_3.3.3 -lm -lgsl -lgslcblas -fpermissive demcmc.cpp 
+// g++ -w -O3 -o lcout -I/home/smills/celerite/celerite/cpp/include -I/home/smills/celerite/celerite/cpp/lib/eigen_3.3.3 -lm -lgsl -lgslcblas -fpermissive phodymm.cpp 
+// or
+// gcc -w -O3 -o lcout.c -lm -lgsl -lgslcblas -fpermissive phodymm.cpp
+// Run with:
 // ./lcout demcmc.in kep35.pldin [[-rv0=rvs0.file] [-rv1=rvs1.file] ... ]
 
 // To compile demcmc:
 // make sure demcmc_compile is defined as 1
-// mpic++ -w -Ofast -o demcmc -I/home/smills/celerite/celerite/cpp/include -I/home/smills/celerite/celerite/cpp/lib/eigen_3.3.3 -lm -lgsl -lgslcblas -lmpi -fpermissive demcmc.cpp
+// mpic++ -w -Ofast -o demcmc -I/home/smills/celerite/celerite/cpp/include -I/home/smills/celerite/celerite/cpp/lib/eigen_3.3.3 -lm -lgsl -lgslcblas -lmpi -fpermissive phodymm.cpp
+// or 
+// mpic++ -w -Ofast -o demcmc -lm -lgsl -lgslcblas -lmpi -fpermissive phodymm.cpp
 // Run with:
 // mpirun ./demcmc demcmc.in kep.pldin
 
 // To compile longterm stability
 // make sure demcmc_compile is defined as 3
 // Compile with:
-// $ gcc -Ofast -o stability -lgsl -lgslcblas -fopenmp demcmc.c
-// g++ -w -O3 -o lcout -I/home/smills/celerite/celerite/cpp/include -I/home/smills/celerite/celerite/cpp/lib/eigen_3.3.3 -lm -lgsl -lgslcblas -fpermissive demcmc.cpp
+// $ gcc -Ofast -o stability -lgsl -lgslcblas -fopenmp phodymm.c
+// g++ -w -O3 -o lcout -lm -lgsl -lgslcblas -fpermissive phodymm.cpp
 
 #if (demcmc_compile==1) 
 #include <mpi.h>
@@ -35,12 +45,14 @@
 #include <float.h>
 #include <gsl/gsl_multimin.h>
 
+#if (celerite_compile == 1)
 // For CELERITE
 #include <cmath>
 #include <iostream>
 #include <Eigen/Core> 
 #include "celerite/celerite.h"
 using Eigen::VectorXd;
+#endif
 
 int CELERITE;
 int NCELERITE=4;
@@ -54,13 +66,18 @@ int NTEMPS;
 int IGT90;
 // turn on positive dilution
 int INCPRIOR;
-//
+// Limb darkening (Pal+2011, or Maxsted+2018)
+int LDLAW;
+// dilution capped?
 int DIGT0;
 // sqrt(e) as parameter?
 int SQRTE;
 // restrict masses to > 0
 int MGT0;
 double MASSHIGH; 
+int MASSPRIOR;
+double *MASSPRIORCENTERS;
+double *MASSPRIORSIGMAS;
 // density cuts
 int DENSITYCUTON;
 double *MAXDENSITY;// g/cm^3
@@ -96,17 +113,16 @@ double normalpdf (double x) {
 // Spectroscopy Constraints - Currently only works for single star. Don't use it for multistar. 
 int SPECTROSCOPY;
 // Assumes assymetric Gaussian
-double SPECRADIUS;
-double SPECERRPOS;
-double SPECERRNEG;
+double SPECRADIUS=0.;
+double SPECERRPOS=0.;
+double SPECERRNEG=0.;
 
 // Spectroscopy Constraints - Currently only works for single star. Don't use it for multistar. 
 int MASSSPECTROSCOPY;
 // Assumes assymetric Gaussian
-double SPECMASS;
-double MASSSPECERRPOS;
-double MASSSPECERRNEG;
-int DILUTERANGE=1;
+double SPECMASS=0.;
+double MASSSPECERRPOS=0.;
+double MASSSPECERRNEG=0.;
 
 int RANK;
 int SIZE;
@@ -132,6 +148,7 @@ char TFILE[1000];
 int *PARFIX;
 double T0;
 double T1;
+unsigned long OUTPUTINTERVAL;
 unsigned long SEED;
 double DISPERSE;
 double OPTIMAL;
@@ -283,2109 +300,331 @@ int func (double t, const double y[], double f[], void *params) {
 void *jac;
 
 
-// Compute transit lightcurve for case of more than 1 luminous body 
-double ***dpintegrator_multi(double ***int_in, double **tfe, double **tve, int *cadencelist) {
 
-  int nbodies = NBODIES;
-  int cadenceswitch = CADENCESWITCH;
-  double t0 = T0;
-  double t1 = T1;
-  int nperbin = NPERBIN;
-  double binwidth = BINWIDTH;
-  const int posstrans = NBODIES;
-  double offsetmult = OFFSETMULT;
-  double offsetmin = OFFSETMIN;
-  double offsetminout = OFFSETMINOUT;
-  double dist2divisor = DIST2DIVISOR;
+
+// Helper for checking if certain parameters are out of 
+int check_boundaries( double *p0local, long nw) {
+  
+  int notallowed = 0;
+  const int npl = NPL;
+  const int pperwalker = PPERWALKER;
+  const int pperplan = PPERPLAN;
   const int sofd = SOFD;
-  const int sofds = SOFDS;
-  const int sofi = SOFI;
-  const int sofis = SOFIS;
+  int ip;
 
-  int nplplus1 = int_in[0][0][0];
-  const int npl = nplplus1-1;
-  double tstart = int_in[1][0][0]; //epoch
-  double rstar = int_in[3][0][0];
-  double dilute = int_in[3][0][1];
 
-  long kk = (long) tfe[0][0];
-  double *timelist;
-  long *order;
-  double *timelist_orig = &tfe[0][1];
+ 
+  for (ip=0; ip<npl; ip++) { 
+    // make sure i and Omega angles are not cycling through:
+    if ( p0local[nw*pperwalker+ip*pperplan+4] < 0.0 || p0local[nw*pperwalker+ip*pperplan+4] > 180.0 ) notallowed=1;
+    if ( p0local[nw*pperwalker+ip*pperplan+5] < -180.0 || p0local[nw*pperwalker+ip*pperplan+5] > 180.0 ) notallowed=1;
+    // make sure i>=90 or i<= 90
+    if ( (IGT90==1) && (p0local[nw*pperwalker+ip*pperplan+4] < 90.0) ) notallowed=1;
+    if ( (IGT90==2) && (p0local[nw*pperwalker+ip*pperplan+4] > 90.0) ) notallowed=1;
+    // make sure m>=0
+    if ( MGT0 && (p0local[nw*pperwalker+ip*pperplan+6] < 0.0) ) notallowed=1;
+    //make sure density is allowed
+    if (DENSITYCUTON) {
+      double massg = p0local[nw*pperwalker+ip*pperplan+6] / MSOMJ * MSUNGRAMS; 
+      double radcm = p0local[nw*pperwalker+npl*pperplan+1] * p0local[nw*pperwalker+ip*pperplan+7] * RSUNCM;
+      double rhogcc = massg / (4./3.*M_PI*radcm*radcm*radcm);
+      if (rhogcc > MAXDENSITY[ip]) notallowed=1;
+    }
+    // make sure radius ratios are positive
+    if (p0local[nw*pperwalker+ip*pperplan+7] < 0.0) notallowed=1;
+  }
 
-  long kkorig = kk;
-  int nb;
-  if (cadenceswitch == 1 ) {
-    timelist = malloc(kk*nperbin*sofd);
-    long q;
-    for (q=0; q<kk; q++) {
-      double tcenter = timelist_orig[q];
-      for (nb=0; nb<nperbin; nb++) {
-        timelist[q*nperbin+nb] = tcenter + (binwidth/nperbin)*(nb+0.5) - binwidth*0.5;
+  if ( DIGT0 && (p0local[nw*pperwalker+npl*pperplan+4] < 0.0) ) notallowed=1;
+
+  // check that RVJITTER >= 0
+  if (RVS) {
+    if (RVJITTERFLAG) {
+      int ki;
+      for (ki=0; ki<RVJITTERTOT; ki++) {
+        if (p0local[nw*pperwalker+npl*pperplan+(5+ki)] < 0.0) {
+          notallowed=1;
+        }
       }
     }
-    kk *= nperbin;
-  } else if (cadenceswitch == 0) {
-    timelist = timelist_orig;
-  } else if (cadenceswitch == 2) {
-    timelist = malloc(kk*nperbin*sofd);
-    order = malloc(kk*nperbin*sizeof(long));
-    long lccount=0;
-    long sccount=0;
-    long q;
-    for (q=0; q<kk; q++) {
-      if (cadencelist[q] == 1) {
-        double tcenter = timelist_orig[q];
-        for (nb=0; nb<nperbin; nb++) {
-          timelist[sccount+lccount*nperbin+nb] = tcenter + (binwidth/nperbin)*(nb+0.5) - binwidth*0.5;
-          order[sccount+lccount*nperbin+nb] = q;
+  }
+  
+  // check that celerite terms >= 0
+  if (CELERITE) {
+      int ki;
+      for (ki=0; ki<NCELERITE; ki++) {
+        if (p0local[nw*pperwalker+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+ki] < 0.0) {
+          notallowed=1;
         }
-        lccount++;
+      }
+  }
+  if (RVCELERITE) {
+      int ki;
+      for (ki=0; ki<NRVCELERITE; ki++) {
+        if (p0local[nw*pperwalker+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+CELERITE*4+ki] < 0.0) {
+          notallowed=1;
+        }
+      }
+  }
+  
+  double* evector = malloc(npl*sofd);
+  if (ECUTON) {
+    if (SQRTE) {
+      int i0;
+      for (i0=0; i0<npl; i0++) {
+        evector[i0] = pow(sqrt( pow(p0local[nw*pperwalker+i0*pperplan+2], 2) + pow(p0local[nw*pperwalker+i0*pperplan+3], 2) ), 2);
+      }
+    } else {
+      int i0;
+      for (i0=0; i0<npl; i0++) {
+        evector[i0] = sqrt( pow(p0local[nw*pperwalker+i0*pperplan+2], 2) + pow(p0local[nw*pperwalker+i0*pperplan+3], 2) );
+      }
+    }
+    // make sure e_d cos  w_d is within its range
+    double* emax = EMAX;
+    int i0;
+    for (i0=0; i0<npl; i0++) {
+      if (evector[i0] > emax[i0] ) notallowed=1;
+    }
+  }
+  
+  // make sure ld coefficients in range
+  // this prior only applies to the Pal+2011 code
+  if ( (LDLAW == 0) && (p0local[nw*pperwalker+npl*pperplan+2] < 0.0 || p0local[nw*pperwalker+npl*pperplan+2] > 1.0 || p0local[nw*pperwalker+npl*pperplan+3] < 0.0 || p0local[nw*pperwalker+npl*pperplan+3] > 1.0) ) notallowed=1;
+ 
+  free(evector);
+ 
+  return notallowed;
+}
+
+
+
+// Helper for computing the priors
+double compute_priors(double *p0local, int i) {
+
+    double neg2logliketemp = 0.;
+    const int pperwalker = PPERWALKER;
+    const int pperplan = PPERPLAN;
+    const int sofd = SOFD;
+    const int npl = NPL;
+
+    double photoradius;
+    photoradius = p0local[i*pperwalker+npl*pperplan+1]; 
+    double photomass;
+    photomass = p0local[i*pperwalker+npl*pperplan+0]; 
+    double* evector; 
+    evector = malloc(npl*sofd);
+
+    if (EPRIOR) {
+      if (SQRTE) {
+        int i0;
+        for (i0=0; i0<npl; i0++) {
+          evector[i0] = pow(sqrt( pow(p0local[i*pperwalker+i0*pperplan+2], 2) + pow(p0local[i*pperwalker+i0*pperplan+3], 2) ), 2);
+        }
       } else {
-        timelist[sccount+lccount*nperbin] = timelist_orig[q];
-        order[sccount+lccount*nperbin] = q;
-        sccount++;
+        int i0;
+        for (i0=0; i0<npl; i0++) {
+          evector[i0] = sqrt( pow(p0local[i*pperwalker+i0*pperplan+2], 2) + pow(p0local[i*pperwalker+i0*pperplan+3], 2) );
+        }
       }
-    }
-    kk = sccount + lccount*nperbin; 
-
-
-    if (OOO == 2) {
-      OOO = 0;
-      for (q=0; q<kk-1; q++) {
-        if (timelist[q+1] < timelist[q]) {
-          OOO = 1;
-          break;
+      int i0;
+      for (i0=0; i0<NPL; i0++) {
+        if (EPRIORV[i0]) {
+          double priorprob;
+          if (EPRIOR==1) {
+            priorprob = rayleighpdf(evector[i0]);
+          } else if (EPRIOR==2) {
+            priorprob = normalpdf(evector[i0]);
+          }
+          neg2logliketemp += -2.0*log( priorprob );
         }
       }
     }
 
-    if (OOO) { 
-      double *tclist = malloc((2*sofd)*kk); 
-      for (q=0; q<kk; q++) {
-        tclist[2*q] = timelist[q];
-        tclist[2*q+1] = (double) order[q];
+    if (MASSPRIOR) {
+      int i0;
+      for (i0=0; i0<NPL; i0++) {
+        double massi = p0local[i*pperwalker+i0*pperplan+6] / MSOMJ;
+        double massratioi = massi / photomass;
+        neg2logliketemp += -2.*log(1./(sqrt(2.*M_PI)*MASSPRIORSIGMAS[i0]));
+        neg2logliketemp += pow((massratioi - MASSPRIORCENTERS[i0])/MASSPRIORSIGMAS[i0], 2);
+      } 
+    }
+
+    if (SPECTROSCOPY) {
+      double normalization = 1./(sqrt(2.*M_PI));
+      normalization *= 2./(SPECERRPOS+SPECERRNEG); // normalized asymmetric Gaussian
+      neg2logliketemp += -2.*log(normalization);
+      if (photoradius > SPECRADIUS) {
+        neg2logliketemp += pow( (photoradius - SPECRADIUS) / SPECERRPOS, 2 );
       }
-      qsort(tclist, kk, sofd*2, compare);
-      for (q=0; q<kk; q++) {
-        timelist[q] = tclist[2*q];
-        order[q] = (long) tclist[2*q+1];
-      }
-      free(tclist);
-    }
-
-  } else {
-    printf("cadenceswitch err\n");
-    exit(0);
-  }
- 
-
-  // Set up integrator
-  const gsl_odeiv_step_type * T 
-  /*   = gsl_odeiv_step_bsimp;   14 s */
-  = gsl_odeiv_step_rk8pd;      /* 3 s */
-  /*  = gsl_odeiv_step_rkf45;    14 s */
-  /*  = gsl_odeiv_step_rk4;      26 s */
-
-  gsl_odeiv_step * s 
-    = gsl_odeiv_step_alloc (T, 6*npl);
-  gsl_odeiv_control * c 
-    = gsl_odeiv_control_y_new (DY, 0.0);
-  gsl_odeiv_evolve * e 
-    = gsl_odeiv_evolve_alloc (6*npl);
-  
-  long i;
-  double mu[npl+1];
-  double npl_mu[npl+2];
-  gsl_odeiv_system sys = {func, jac, 6*npl, npl_mu};
-
-
-  double t; /* this is the given epoch. */
-  double hhere;  
-  double y[6*npl], yin[6*npl];
-  //note:rad is in units of rp/rstar
-  double *rad = malloc(npl*sofd);
-  double brightness[npl+1];
-  double c1list[npl+1];
-  double c2list[npl+1];
-
-  mu[0] = int_in[2][0][0]; 
-  brightness[0] = int_in[2][0][8];
-  c1list[0] = int_in[2][0][9];
-  c2list[0] = int_in[2][0][10]; 
-
-  for (i=0; i<npl; i++) {
-    mu[i+1] = int_in[2][i+1][0];
-    yin[i*6+0] = int_in[2][i+1][1];
-    yin[i*6+1] = int_in[2][i+1][2];
-    yin[i*6+2] = int_in[2][i+1][3];
-    yin[i*6+3] = int_in[2][i+1][4];
-    yin[i*6+4] = int_in[2][i+1][5];
-    yin[i*6+5] = int_in[2][i+1][6];
-    rad[i] = int_in[2][i+1][7];  
-    brightness[i+1] = int_in[2][i+1][8];
-    c1list[i+1] = int_in[2][i+1][9];
-    c2list[i+1] = int_in[2][i+1][10];
-  }
-
-  memcpy(&npl_mu[1], mu, (npl+1)*sofd);
-  npl_mu[0] = npl;
-
-  double mtot=mu[0];
-  for(i=0;i<npl;i++) mtot += mu[i+1];
-
-  double yhone[6*npl], dydt[6*npl], yerrhone[6*npl];
-  double yhone0[6*npl];
-  double thone,tstep,dist,vtrans;
-  double vstar,astar;
-
-  int k;
-  int brights=0;
-  int *brightsindex = malloc((npl+1)*sofi);
-  for (k=0; k<npl+1; k++) {
-    if (brightness[k] > 0) {
-      brightsindex[brights] = k;
-      brights++;
-    }
-  }
-
-  double **fluxlist = malloc(brights*sofds);
-  for (k=0; k<brights; k++) {
-    fluxlist[k] = malloc(kk*sofd);
-  }
-  double *netflux = malloc((kk+1)*sofd);
-  double **tmte = malloc(4*sofds);
-
-  tmte[0] = &tfe[0][0];
-  tmte[1] = &tfe[1][0]; // measured flux list;
-  tmte[3] = &tfe[2][0]; // error list;
-
-  int **transitcount = malloc(brights*sofis);
-  for (k=0; k<brights; k++) {
-    transitcount[k] = malloc((npl+1)*sofi);
-    for (i=0; i<(npl+1); i++) {
-      transitcount[k][i] = -1;
-    }
-  }
-
-  int pl;
-  int **numplanets = malloc(brights*sofis);
-  for (k=0; k<brights; k++) {
-    numplanets[k] = calloc(kk, sofi);
-  }
-  int ***whereplanets = malloc(brights*sizeof(int**));
-  for (k=0; k<brights; k++) {
-    whereplanets[k] = malloc(kk*sofis);
-    long kkc;
-    for (kkc=0; kkc<kk; kkc++) {
-      whereplanets[k][kkc] = calloc(nbodies, sofi);
-    }
-  }
-
-  double ****tranarray = malloc(brights*sizeof(double***));
-  for (k=0; k<brights; k++) {
-    tranarray[k] = malloc(kk*sizeof(double**));
-    long kkc;
-    for (kkc=0; kkc<kk; kkc++) {
-      tranarray[k][kkc] = malloc(posstrans*sofds);
-      long kkcc;
-      for (kkcc=0; kkcc<posstrans; kkcc++) {
-        tranarray[k][kkc][kkcc] = malloc(3*sofd);
-      }
-    }
-  }
-
- 
-  // set up directories for output if we are just doing a single run 
-#if ( demcmc_compile == 0 ) 
-  FILE ***directory = malloc(brights*sizeof(FILE**));
-  for (k=0; k<brights; k++) {
-    directory[k] = malloc((npl+1)*sizeof(FILE*));
-  }
-  for (k=0; k<brights; k++) {
-    int k1 = brightsindex[k];
-    for (i=0; i<(npl+1); i++) {
-      if (i != k1) {
-        char str[30];
-        sprintf(str, "tbv%02i_%02i.out", k1, i);
-        directory[k][i]=fopen(str,"w");
-      }
-    }
-  }
-#endif
-
-
-  /* Setup forward integration */
-  double ps2, dist2;  /* ps2 = projected separation squared. */
-  t = tstart;
-  double h = HStart;
-  long maxtransits = 10000;  //total transits per planet
-  int ntarrelem = 6;
-  double **transitarr = malloc(brights*sofds);
-  for (k=0; k<brights; k++) {
-    transitarr[k] = malloc((maxtransits+1)*ntarrelem*sofd);
-  }
-  if (transitarr[brights-1] == NULL) {
-      printf("Allocation Error\n");
-      exit(0);
-  }
-  long *ntransits = calloc(brights, sizeof(long));
-
-  seteq(npl, y, yin);
-  double **dp = malloc(brights*sofds);
-  double **dpold = malloc(brights*sofds);
-  double ddpdt;
-  for (i=0; i<brights; i++) {
-      dp[i] = malloc(npl*sofd);
-      dpold[i] = malloc(npl*sofd);
-  }
-  for(pl=0; pl<npl; pl++) dp[0][pl]=y[0+pl*6]*y[3+pl*6]+y[1+pl*6]*y[4+pl*6];
-  for (i=1; i<brights; i++) {
-      for(pl=0; pl<npl; pl++) {
-          dp[i][pl]=(y[0+pl*6]-y[0+(i-1)*6])*y[3+pl*6] + (y[1+pl*6]-y[1+(i-1)*6])*y[4+pl*6];
-      }
-  }
-
-  long vv = 0;
-  // This messes up reduced chi squared if your rv values are outside of the integration time!!!  
-  // But we are only comparing relative chi squareds
-  // Plus just don't include rv times that aren't within your integration bounds, because that's silly
-  double *rvarr;
-  double *rvtarr;
-  int onrv = 0;
-  int rvcount, startrvcount; 
-  if (RVS) {
-    vv = (long) tve[0][0];
-    rvarr = calloc(vv+1, sofd);
-    rvarr[0] = (double) vv;
-    rvtarr = malloc((vv+2)*sofd);
-    rvtarr[0] = -HUGE_VAL;
-    rvtarr[vv+1] = HUGE_VAL;
-    memcpy(&rvtarr[1], &tve[0][1], vv*sofd);
-    startrvcount = 1;
-    while (rvtarr[startrvcount] < tstart) startrvcount+=1;
-    rvcount = startrvcount;
-  }
-
-
-  double eps=1e-10;
-  double yhonedt[6*npl];
-  double dydtdt[6*npl];
-  double thonedt;
-  double dt;
-  double baryz, baryz2;
-  double zb, zb2;
-  double zp, zs;
-  double dt1, dt2;
-  double t2;
-  double baryc[6*npl];
-  double baryc2[6*npl];
-  double dbarycdt[6*npl];
-  double dbarycdt2[6*npl];
-  double starimage[6*npl];
-  double dstarimagedt[6*npl];
-  int ii;
-  int j;
-
-  // Integrate forward from epoch
-  while (t < t1 ) {      
-
-    if (RVS) {
-      onrv=0;
-      if (h + t > rvtarr[rvcount]) {  
-        onrv = 1;
-        hhere = h;
-        h = rvtarr[rvcount] - t;
+      else {
+        neg2logliketemp += pow( (photoradius - SPECRADIUS) / SPECERRNEG, 2 );
       }
     }
 
-    int status = gsl_odeiv_evolve_apply (e, c, s,
-                                         &sys, 
-                                         &t, t1,
-                                         &h, y);
-
-    if (status != GSL_SUCCESS)
-        break;
-
-    if (RVS) {
-       if (onrv ==1) {
-         h = hhere;
-         func(t, y, dydt, mu);
-         vstar = 0;
-         for (i=0; i<npl; i++) {
-           vstar += -y[i*6+5]*mu[i+1]/mtot;
-         }
-         if (tve[3][rvcount] == 0) {
-           rvarr[rvcount] = vstar; 
-         } else {
-           rvarr[rvcount] = vstar + y[(((int) tve[3][rvcount])-1)*6+5];
-         }
-         rvcount += 1;
-
-
-       }
+    if (MASSSPECTROSCOPY) {
+      double normalization = 1./(sqrt(2.*M_PI));
+      normalization *= 2./(MASSSPECERRPOS+MASSSPECERRNEG); // normalized asymmetric Gaussian
+      neg2logliketemp += -2.*log(normalization);
+      if (photomass > SPECMASS) neg2logliketemp += pow( (photomass - SPECMASS) / MASSSPECERRPOS, 2 );
+      else neg2logliketemp += pow( (photomass - SPECMASS) / MASSSPECERRNEG, 2 );
     }
 
-    //distance squared to first planet
-    dist2 = pow(y[0],2)+pow(y[1],2)+pow(y[2],2);
-
-    for(pl=0; pl<npl; pl++) {  /* Cycle through the planets, searching for a transit. */
-        dpold[0][pl]=dp[0][pl];
-        dp[0][pl]=y[0+pl*6]*y[3+pl*6]+y[1+pl*6]*y[4+pl*6];
-        ps2=y[0+pl*6]*y[0+pl*6]+y[1+pl*6]*y[1+pl*6];
-
-      if( dp[0][pl]*dpold[0][pl] <= 0 && ps2 < dist2/dist2divisor && y[2+pl*6]<0 && brights>1) { 
-                     // A minimum projected-separation occurred: "Tc".  
-                //   ps2 constraint makes sure it's when y^2+z^2 is small-- its on the face of the star.  
-                  //   y[2] constraint means a primary eclipse, presuming that the observer is on the positive x=y[2] axis.
-        seteq(npl, yhone, y);
-        thone = t;
-
-        if (LTE) {
-          ii=0;
-          dt = -yhone[2+pl*6] / CAUPD;
-          seteq(npl, yhonedt, yhone);
-          gsl_odeiv_step_apply (s, thone, dt, yhonedt, yerrhone, NULL, NULL, &sys);
-          thonedt = thone+dt;
- 
-          do {
-            func(thone, yhone, dydt, npl_mu);
-            func(thonedt, yhonedt, dydtdt, npl_mu);
- 
-            for (j=0; j<6; j++) {
-              baryc[j] = 0.;
-              baryc2[j] = 0.;
-              dbarycdt[j] = 0.;
-              dbarycdt2[j] = 0.;
-              for (i=0; i<npl; i++) {
-                baryc[j] += yhone[j+i*6]*mu[i+1];
-                baryc2[j] += yhonedt[j+i*6]*mu[i+1];
-                dbarycdt[j] += dydt[j+i*6]*mu[i+1];
-                dbarycdt2[j] += dydtdt[j+i*6]*mu[i+1];
-              }
-              baryc[j] /= mtot;
-              baryc2[j] /= mtot;
-              dbarycdt[j] /= mtot;
-              dbarycdt2[j] /= mtot;
- 
-              starimage[j] = baryc2[j]-baryc[j];
-              dstarimagedt[j] = dbarycdt2[j]-dbarycdt[j];
-            }
- 
-            dp[0][pl] = (yhonedt[0+pl*6]-starimage[0])*(yhonedt[3+pl*6]-starimage[3]) + (yhonedt[1+pl*6]-starimage[1])*(yhonedt[4+pl*6]-starimage[4]);
-            double ddpdt = (dydtdt[0+pl*6]-dstarimagedt[0])*(dydtdt[0+pl*6]-dstarimagedt[0]) + (dydtdt[1+pl*6]-dstarimagedt[1])*(dydtdt[1+pl*6]-dstarimagedt[1]) + (yhonedt[0+pl*6]-starimage[0])*(dydtdt[3+pl*6]-dstarimagedt[3]) + (yhonedt[1+pl*6]-starimage[1])*(dydtdt[4+pl*6]-dstarimagedt[4]);
- 
- 
-            zs = 0.0;
-            zp = yhonedt[2+pl*6]/CAUPD;
-            zb = baryc[2]/CAUPD;
-            zb2 = baryc2[2]/CAUPD;
-            zs -= zb;
-            zp -= zb2;
-            dt1 = zs;
-            dt2 = -zp;
-            dt = dt1+dt2;
-            
-            tstep = - dp[0][pl]/ddpdt;
-            gsl_odeiv_step_apply (s, thone, tstep, yhone, yerrhone, NULL, NULL, &sys);
-            seteq(npl, yhonedt, yhone);
-            gsl_odeiv_step_apply (s, thone, dt, yhonedt, yerrhone, NULL, NULL, &sys);
-            thone += tstep;
-            thonedt = thone+dt;
-            ii++;
- 
-          } while (ii<10 && fabs(tstep)>eps);
-
-          dist = sqrt( pow( (yhonedt[0+pl*6]-starimage[0]), 2) + pow( (yhonedt[1+pl*6]-starimage[1]), 2) ); 
- 
-        } else {
-
-          ii=0;
-          do {
-            func (thone, yhone, dydt, npl_mu);
-            ddpdt = dydt[0+pl*6]*dydt[0+pl*6] + dydt[1+pl*6]*dydt[1+pl*6] + yhone[0+pl*6]*dydt[3+pl*6] + yhone[1+pl*6]*dydt[4+pl*6];
-            tstep = - dp[0][pl] / ddpdt;
-            gsl_odeiv_step_apply (s, thone, tstep, yhone, yerrhone, dydt, NULL, &sys);
-            thone += tstep;
-            dp[0][pl]=yhone[0+pl*6]*yhone[3+pl*6]+yhone[1+pl*6]*yhone[4+pl*6];
-            ii++;
-          } while (ii<5 && fabs(tstep)>eps);
-            
-          dist = sqrt(pow(yhone[0+pl*6],2)+pow(yhone[1+pl*6],2));
-
-        }
-
-        dp[0][pl]=y[0+pl*6]*y[3+pl*6]+y[1+pl*6]*y[4+pl*6];
-
-        if (dist < 2.0*((rstar + rstar*rad[pl])*RSUNAU)) {
-
-          transitcount[0][pl+1] += 1;  // Update the transit number. 
-
-          if (LTE) {
-            for (j=0; j<6; j++) {
-              baryc[j] = 0.;
-              baryc2[j] = 0.;
-              for (i=0; i<npl; i++) {
-                baryc[j] += yhone[j+i*6]*mu[i+1];
-                baryc2[j] += yhonedt[j+i*6]*mu[i+1];
-              }
-              baryc[j] /= mtot;
-              baryc2[j] /= mtot;
- 
-              starimage[j] = baryc2[j]-baryc[j];
-            }
- 
-            zs = 0.0;
-            zp = yhonedt[2+pl*6]/CAUPD;
-            zb = baryc[2]/CAUPD;
-            zb2 = baryc2[2]/CAUPD;
-            zs -= zb;
-            zp -= zb2;
-            dt1 = zs;
-            dt2 = -zp;
-            dt = dt1+dt2;
- 
-            dist = sqrt( pow( yhonedt[0+pl*6] - starimage[0], 2) + pow( yhonedt[1+pl*6] - starimage[1], 2) ); 
-            vtrans = sqrt( pow( yhonedt[3+pl*6] - starimage[3], 2) + pow( yhonedt[4+pl*6] - starimage[4], 2) ); 
-          } else {
-            dist = sqrt(pow(yhone[0+pl*6],2)+pow(yhone[1+pl*6],2));
-            vtrans = sqrt(pow(yhone[3+pl*6],2)+pow(yhone[4+pl*6],2)); 
-            zs=0;
-            zb2=0;
-          }
-
-          t2 =  thone + zs;
-
-#if ( demcmc_compile == 0 ) 
-          fprintf(directory[0][pl+1], "%6d  %.18e  %.10e  %.10e\n", transitcount[0][pl+1], t2, dist, vtrans);
-#endif
-
-          double vplanet, toffset, tinit, tfin;
-          long ic, nc, ac;
-          double thone0, hold;
-
-          vplanet = fmax(vtrans, 0.0001); // can't divide by 0, so set min value. 
-          toffset = offsetmult*(rstar*(1+rad[pl]))*RSUNAU/vplanet;
-          toffset = fmin(toffset, offsetmin);
-          tinit = t2 - toffset;
-          tfin = t2 + toffset;
-          ic=0;
-          while (ic<(kk-1) && timelist[ic]<tinit) {
-            ic++;
-          } 
-          nc=0;
-          while ((ic+nc)<(kk-1) && timelist[ic+nc]<tfin) {
-            nc++;
-          }
-          seteq(npl, yhone0, yhone);
-          thone0=thone;
-          hold=h;
-
-          for (ac=0; ac<nc; ac++) {
-
-            if (whereplanets[0][ic+ac][pl+1] == 0) { // i.e. if this body's location not already computed
- 
-              int tnum;
-              double tcur, ts1, ts2;
-
-              tnum = numplanets[0][ic+ac];
-              // stellar time 
-              tcur = timelist[ic+ac] - zs;
-              ts1 = tcur-thone;
-              if (fabs(ts1) > fabs(h)) {
-                h = fabs(h)*fabs(ts1)/ts1;
-              } else {
-                h = ts1;
-              }
-              while ( !(status!=GSL_SUCCESS) && !(dbleq(tcur, thone)) ){
-                status = gsl_odeiv_evolve_apply(e, c, s, &sys, &thone, tcur, &h, yhone); 
-              }
-              if (LTE) {
-                ts2 = (tcur+dt)-thonedt;
-                if (fabs(ts2) > fabs(h)) {
-                  h = fabs(h)*fabs(ts2)/ts2;
-                } else {
-                  h = ts2;
-                }
-                while ( !(status!=GSL_SUCCESS) && !(dbleq(tcur+dt, thonedt)) ){
-                  status = gsl_odeiv_evolve_apply(e, c, s, &sys, &thonedt, tcur+dt, &h, yhonedt); 
-                }
-              }
-              if (status != GSL_SUCCESS) {
-                printf("Big problem\n");
-                exit(0);
-              }
-  
-              if (LTE) {
-                for (j=0; j<6; j++) {
-                  baryc[j] = 0.;
-                  baryc2[j] = 0.;
-                  for (i=0; i<npl; i++) {
-                    baryc[j] += yhone[j+i*6]*mu[i+1];
-                    baryc2[j] += yhonedt[j+i*6]*mu[i+1];
-                  }
-                  baryc[j] /= mtot;
-                  baryc2[j] /= mtot;
-     
-                  starimage[j] = baryc2[j]-baryc[j];
-                }
-     
-                zs = 0.0;
-                zp = yhonedt[2+pl*6]/CAUPD;
-                zb = baryc[2]/CAUPD;
-                zb2 = baryc2[2]/CAUPD;
-                zs -= zb;
-                zp -= zb2;
-                dt1 = zs;
-                dt2 = -zp;
-                dt = dt1+dt2;
-              }
- 
-              if (yhone[2+pl*6] < 0.0) {
-
-                whereplanets[0][ic+ac][pl+1] = 1;
-                tranarray[0][ic+ac][tnum][0] = rad[pl]*rstar*RSUNAU; 
-                numplanets[0][ic+ac]+=1;
-
-                if (LTE) {
-
-                  tranarray[0][ic+ac][tnum][1] = yhonedt[0+pl*6]-starimage[0];
-                  tranarray[0][ic+ac][tnum][2] = yhonedt[1+pl*6]-starimage[1];
-
-                } else {
-
-                  tranarray[0][ic+ac][tnum][1] = yhone[0+pl*6];
-                  tranarray[0][ic+ac][tnum][2] = yhone[1+pl*6];
-
-                }
-              } 
-            }
-          }
-          seteq(npl, yhone, yhone0);
-          thone=thone0;
-          h=hold;
-        } 
-      }
-    }
-    int st;
-    int st1;
-    for (st1=1; st1<brights; st1++) {
-      st = brightsindex[st1];
-      int stm1 = st-1;
-      dpold[st1][stm1]=dp[st1][stm1];
-      dp[st1][stm1]=y[0+stm1*6]*y[3+stm1*6]+y[1+stm1*6]*y[4+stm1*6];
-      ps2=y[0+stm1*6]*y[0+stm1*6]+y[1+stm1*6]*y[1+stm1*6];
- 
-      if( dp[st1][stm1]*dpold[st1][stm1] <= 0 && ps2 < dist2/dist2divisor && y[2+stm1*6]>0 && brights > 1) { 
-
-        seteq(npl, yhone, y);
-        thone = t;
-
-        if (LTE) {
-          ii=0;
-          dt = yhone[2+stm1*6] / CAUPD;
-          seteq(npl, yhonedt, yhone);
-          gsl_odeiv_step_apply (s, thone, dt, yhonedt, yerrhone, NULL, NULL, &sys);
-          thonedt = thone+dt;
- 
-          do {
-            func(thone, yhone, dydt, npl_mu);
-            func(thonedt, yhonedt, dydtdt, npl_mu);
- 
-            for (j=0; j<6; j++) {
-              baryc[j] = 0.;
-              baryc2[j] = 0.;
-              dbarycdt[j] = 0.;
-              dbarycdt2[j] = 0.;
-              for (i=0; i<npl; i++) {
-                baryc[j] += yhone[j+i*6]*mu[i+1];
-                baryc2[j] += yhonedt[j+i*6]*mu[i+1];
-                dbarycdt[j] += dydt[j+i*6]*mu[i+1];
-                dbarycdt2[j] += dydtdt[j+i*6]*mu[i+1];
-              }
-              baryc[j] /= mtot;
-              baryc2[j] /= mtot;
-              dbarycdt[j] /= mtot;
-              dbarycdt2[j] /= mtot;
- 
-              starimage[j] = -baryc2[j]+baryc[j];
-              dstarimagedt[j] = -dbarycdt2[j]+dbarycdt[j];
-            }
- 
-            dp[st1][stm1] = (yhone[0+stm1*6]-starimage[0])*(yhone[3+stm1*6]-starimage[3]) + (yhone[1+stm1*6]-starimage[1])*(yhone[4+stm1*6]-starimage[4]);
-            double ddpdt = (dydt[0+stm1*6]-dstarimagedt[0])*(dydt[0+stm1*6]-dstarimagedt[0]) + (dydt[1+stm1*6]-dstarimagedt[1])*(dydt[1+stm1*6]-dstarimagedt[1]) + (yhone[0+stm1*6]-starimage[0])*(dydt[3+stm1*6]-dstarimagedt[3]) + (yhone[1+stm1*6]-starimage[1])*(dydt[4+stm1*6]-dstarimagedt[4]);
- 
- 
-            zs = yhone[2+stm1*6]/CAUPD;
-            zp = 0.0;
-            zb = baryc[2]/CAUPD;
-            zb2 = baryc2[2]/CAUPD;
-            zs -= zb;
-            zp -= zb2;
-            dt1 = zs;
-            dt2 = -zp;
-            dt = dt1+dt2;
-            
-            tstep = - dp[st1][stm1]/ddpdt;
-            gsl_odeiv_step_apply (s, thone, tstep, yhone, yerrhone, NULL, NULL, &sys);
-            seteq(npl, yhonedt, yhone);
-            gsl_odeiv_step_apply (s, thone, dt, yhonedt, yerrhone, NULL, NULL, &sys);
-            thone += tstep;
-            thonedt = thone+dt;
-            ii++;
- 
-          } while (ii<10 && fabs(tstep)>eps);
-
-          dist = sqrt( pow( (yhone[0+stm1*6]-starimage[0]), 2) + pow( (yhone[1+stm1*6]-starimage[1]), 2) ); 
- 
-        } else {
-
-          ii=0;
-          do {
-            func (thone, yhone, dydt, npl_mu);
-            ddpdt = dydt[0+stm1*6]*dydt[0+stm1*6] + dydt[1+stm1*6]*dydt[1+stm1*6] + yhone[0+stm1*6]*dydt[3+stm1*6] + yhone[1+stm1*6]*dydt[4+stm1*6];
-            tstep = - dp[st1][stm1] / ddpdt;
-            gsl_odeiv_step_apply (s, thone, tstep, yhone, yerrhone, dydt, NULL, &sys);
-            thone += tstep;
-            dp[st1][stm1]=yhone[0+stm1*6]*yhone[3+stm1*6]+yhone[1+stm1*6]*yhone[4+stm1*6];
-            ii++;
-          } while (ii<5 && fabs(tstep)>eps);
-          
-          dist = sqrt(pow(yhone[0+stm1*6],2)+pow(yhone[1+stm1*6],2));
-
-        }
-
-        dp[st1][stm1]=y[0+stm1*6]*y[3+stm1*6]+y[1+stm1*6]*y[4+stm1*6];
-
-        if (dist < 2.0*((rstar + rstar*rad[stm1])*RSUNAU)) {
-
-          transitcount[st1][0] += 1;  // Update the transit number. 
-
-          if (LTE) {
-            for (j=0; j<6; j++) {
-              baryc[j] = 0.;
-              baryc2[j] = 0.;
-              for (i=0; i<npl; i++) {
-                baryc[j] += yhone[j+i*6]*mu[i+1];
-                baryc2[j] += yhonedt[j+i*6]*mu[i+1];
-              }
-              baryc[j] /= mtot;
-              baryc2[j] /= mtot;
- 
-              starimage[j] = -baryc2[j]+baryc[j];
-            }
-            zs = yhone[2+stm1*6]/CAUPD;
-            zp = 0.0;
-            zb = baryc[2]/CAUPD;
-            zb2 = baryc2[2]/CAUPD;
-            zs -= zb;
-            zp -= zb2;
-            dt1 = zs;
-            dt2 = -zp;
-            dt = dt1+dt2;
-            
-            dist = sqrt( pow( yhone[0+stm1*6] - starimage[0], 2) + pow( yhone[1+stm1*6] - starimage[1], 2) ); 
-            vtrans = sqrt( pow( yhone[3+stm1*6] - starimage[3], 2) + pow( yhone[4+stm1*6] - starimage[4], 2) ); 
-          } else {
-            dist = sqrt(pow(yhone[0+stm1*6],2)+pow(yhone[1+stm1*6],2));
-            vtrans = sqrt(pow(yhone[3+stm1*6],2)+pow(yhone[4+stm1*6],2)); 
-            zs=0;
-            zb2=0;
-          }
-
-          t2 = thone + zs;
-
-#if ( demcmc_compile == 0 )
-          fprintf(directory[st1][0], "%6d  %.18e  %.10e  %.10e\n", transitcount[st1][0], t2, dist, vtrans);
-#endif
-
-          double vplanet, toffset, tinit, tfin;
-          long ic, nc, ac;
-          double thone0, hold;
-
-          vplanet = fmax(vtrans, 0.0001);
-          toffset = offsetmult*(rstar*(1+rad[stm1]))*RSUNAU/vplanet;
-          toffset = fmin(toffset, offsetmin);
-          tinit = t2 - toffset;
-          tfin = t2 + toffset;
-          ic=0;
-          while (ic<(kk-1) && timelist[ic]<tinit) {
-            ic++;
-          } 
-          nc=0;
-          while ((ic+nc)<(kk-1) && timelist[ic+nc]<tfin) {
-            nc++;
-          }
-          seteq(npl, yhone0, yhone);
-          thone0=thone;
-          hold=h;
-
-          for (ac=0; ac<nc; ac++) {
-
-            if (whereplanets[st1][ic+ac][0] == 0) { // i.e. if this body's location not already computed
- 
-              int tnum;
-              double tcur, ts1, ts2;
-
-              tnum = numplanets[st1][ic+ac];
-              // stellar time 
-              tcur = timelist[ic+ac] - zs;
-              ts1 = (tcur-thone);
-              if (fabs(ts1) > fabs(h)) {
-                h = fabs(h)*fabs(ts1)/ts1;
-              } else {
-                h = ts1;
-              }
-              while ( !(status!=GSL_SUCCESS) && !(dbleq(tcur, thone)) ){
-                status = gsl_odeiv_evolve_apply(e, c, s, &sys, &thone, tcur, &h, yhone); 
-              }
-              if (LTE) {
-                ts2 = (tcur+dt)-thonedt;
-                if (fabs(ts2) > fabs(h)) {
-                  h = fabs(h)*fabs(ts2)/ts2;
-                } else {
-                  h = ts2;
-                }
-                while ( !(status!=GSL_SUCCESS) && !(dbleq(tcur+dt, thonedt)) ){
-                  status = gsl_odeiv_evolve_apply(e, c, s, &sys, &thonedt, tcur+dt, &h, yhonedt); 
-                }
-              }
-              if (status != GSL_SUCCESS) {
-                printf("Big problem\n");
-                exit(0);
-              }
-  
-              if (LTE) {
-                for (j=0; j<6; j++) {
-                  baryc[j] = 0.;
-                  baryc2[j] = 0.;
-                  for (i=0; i<npl; i++) {
-                    baryc[j] += yhone[j+i*6]*mu[i+1];
-                    baryc2[j] += yhonedt[j+i*6]*mu[i+1];
-                  }
-                  baryc[j] /= mtot;
-                  baryc2[j] /= mtot;
-     
-                  starimage[j] = -baryc2[j]+baryc[j];
-                }
-                zs = yhone[2+stm1*6]/CAUPD;
-                zp = 0.0;
-                zb = baryc[2]/CAUPD;
-                zb2 = baryc2[2]/CAUPD;
-                zs -= zb;
-                zp -= zb2;
-                dt1 = zs;
-                dt2 = -zp;
-                dt = dt1+dt2;
-              }
- 
-              if (yhone[2+stm1*6] > 0.0) {
-
-                whereplanets[st1][ic+ac][0] = 1;
-                tranarray[st1][ic+ac][tnum][0] = rstar*RSUNAU; 
-                numplanets[st1][ic+ac]+=1;
-
-                if (LTE) {
-
-                  tranarray[st1][ic+ac][tnum][1] = -(yhone[0+stm1*6]-starimage[0]);
-                  tranarray[st1][ic+ac][tnum][2] = -(yhone[1+stm1*6]-starimage[1]);
-
-                } else {
-
-                  tranarray[st1][ic+ac][tnum][1] = -yhone[0+stm1*6];
-                  tranarray[st1][ic+ac][tnum][2] = -yhone[1+stm1*6];
-
-                }
-              } 
-            }
-          }
-          seteq(npl, yhone, yhone0);
-          thone=thone0;
-          h=hold;
-        } 
-      }
-      for (pl=0; pl<npl; pl++) {
-        if (pl != stm1) {
-             dpold[st1][pl]=dp[st1][pl];
-          dp[st1][pl]=(y[0+pl*6]-y[0+st1*6])*(y[3+pl*6]-y[3+st1*6]) + (y[1+pl*6]-y[1+st1*6])*(y[4+pl*6]-y[4+st1*pl]);
-          ps2=pow((y[0+pl*6]-y[0+st1*6]),2) + pow((y[1+pl*6]-y[1+st1*6]),2);
-
-          if (dp[st1][pl]*dpold[st1][pl] <= 0 && ps2 < dist2/dist2divisor && y[2+st1*6]>y[2+pl*6] && brights > 1) { 
-    
-                seteq(npl, yhone, y);
-                thone = t;
-    
-            if (LTE) {
-              ii=0;
-              dt = -(yhone[2+pl*6] - yhone[2+st1*6]) / CAUPD;
-              seteq(npl, yhonedt, yhone);
-              gsl_odeiv_step_apply (s, thone, dt, yhonedt, yerrhone, NULL, NULL, &sys);
-              thonedt = thone+dt;
-     
-              do {
-                func(thone, yhone, dydt, npl_mu);
-                func(thonedt, yhonedt, dydtdt, npl_mu);
-     
-                for (j=0; j<6; j++) {
-                  baryc[j] = 0.;
-                  baryc2[j] = 0.;
-                  dbarycdt[j] = 0.;
-                  dbarycdt2[j] = 0.;
-                  for (i=0; i<npl; i++) {
-                    baryc[j] += yhone[j+i*6]*mu[i+1];
-                    baryc2[j] += yhonedt[j+i*6]*mu[i+1];
-                    dbarycdt[j] += dydt[j+i*6]*mu[i+1];
-                    dbarycdt2[j] += dydtdt[j+i*6]*mu[i+1];
-                  }
-                  baryc[j] /= mtot;
-                  baryc2[j] /= mtot;
-                  dbarycdt[j] /= mtot;
-                  dbarycdt2[j] /= mtot;
-    
-                  //starimage should really be starshift here
-                  starimage[j] = baryc2[j]-baryc[j];
-                  dstarimagedt[j] = dbarycdt2[j]-dbarycdt[j];
-                }
-    
-                dp[st1][pl] = (yhonedt[0+pl*6]-yhone[0+st1*6]-starimage[0])*(yhonedt[3+pl*6]-yhone[3+st1*6]-starimage[3]) + (yhonedt[1+pl*6]-yhone[1+st1*6]-starimage[1])*(yhonedt[4+pl*6]-yhone[4+st1*6]-starimage[4]);
-                double ddpdt = (dydtdt[0+pl*6]-dydt[0+st1*6]-dstarimagedt[0])*(dydtdt[0+pl*6]-dydt[0+st1*6]-dstarimagedt[0]) + (dydtdt[1+pl*6]-dydt[1+st1*6]-dstarimagedt[1])*(dydtdt[1+pl*6]-dydt[1+st1*6]-dstarimagedt[1]) + (yhonedt[0+pl*6]-yhone[0+st1*6]-starimage[0])*(dydtdt[3+pl*6]-dydt[3+st1*6]-dstarimagedt[3]) + (yhonedt[1+pl*6]-yhone[1+st1*6]-starimage[1])*(dydt[4+pl*6]-dydt[4+st1*6]-dstarimagedt[4]);
-     
-     
-                zs = yhone[2+st1*6]/CAUPD;
-                zp = yhonedt[2+pl*6]/CAUPD;
-                zb = baryc[2]/CAUPD;
-                zb2 = baryc2[2]/CAUPD;
-                zs -= zb;
-                zp -= zb2;
-                dt1 = zs;
-                dt2 = -zp;
-                dt = dt1+dt2;
-                
-                tstep = - dp[st1][pl]/ddpdt;
-                gsl_odeiv_step_apply (s, thone, tstep, yhone, yerrhone, NULL, NULL, &sys);
-                seteq(npl, yhonedt, yhone);
-                gsl_odeiv_step_apply (s, thone, dt, yhonedt, yerrhone, NULL, NULL, &sys);
-                thone += tstep;
-                thonedt = thone+dt;
-                ii++;
-     
-              } while (ii<10 && fabs(tstep)>eps);
-                
-              dist = sqrt( pow( (yhonedt[0+pl*6]-yhone[0+st1*6]-starimage[0]), 2) + pow( (yhonedt[1+pl*6]-yhone[1+st1*6]-starimage[1]), 2) ); 
-     
-            } else {
-    
-              ii=0;
-              do {
-                func (thone, yhone, dydt, npl_mu);
-                ddpdt = (dydt[0+pl*6]-dydt[0+stm1*6])*(dydt[0+pl*6]-dydt[0+stm1*6]) + (dydt[1+pl*6]-dydt[1+stm1*6])*(dydt[1+pl*6]-dydt[1+stm1*6]) + (yhone[0+pl*6]-yhone[0+stm1*6])*(dydt[3+pl*6]-dydt[3+stm1*6]) + (yhone[1+pl*6]-yhone[1+stm1*6])*(dydt[4+pl*6]-dydt[4+stm1*6]);
-                tstep = - dp[st1][pl] / ddpdt;
-                gsl_odeiv_step_apply (s, thone, tstep, yhone, yerrhone, dydt, NULL, &sys);
-                thone += tstep;
-                dp[st1][pl]=(yhone[0+pl*6]-yhone[0+stm1*6])*(yhone[3+pl*6]-yhone[3+stm1*6]) + (yhone[1+pl*6]-yhone[1+stm1*6])*(yhone[4+pl*6]-yhone[4+stm1*6]);
-                ii++;
-              } while (ii<5 && fabs(tstep)>eps);
-                
-              dist = sqrt( pow( (yhone[0+pl*6]-yhone[0+stm1*6]), 2) + pow( (yhone[1+pl*6]-yhone[1+stm1*6]), 2) ); 
-    
-            }
-    
-            dp[st1][pl]=(y[0+pl*6]-y[0+stm1*6])*(y[3+pl*6]-y[3+stm1*6]) + (y[1+pl*6]-y[1+stm1*6])*(y[4+pl*6]-y[4+stm1*6]);
-    
-            if (dist < 2.0*((rstar*rad[st1] + rstar*rad[pl])*RSUNAU)) {
-    
-              transitcount[st1][pl+1] += 1;  // Update the transit number. 
-    
-              if (LTE) {
-                for (j=0; j<6; j++) {
-                  baryc[j] = 0.;
-                  baryc2[j] = 0.;
-                  for (i=0; i<npl; i++) {
-                    baryc[j] += yhone[j+i*6]*mu[i+1];
-                    baryc2[j] += yhonedt[j+i*6]*mu[i+1];
-                  }
-                  baryc[j] /= mtot;
-                  baryc2[j] /= mtot;
-     
-                  starimage[j] = baryc2[j]-baryc[j];
-                }
-                zs = yhone[2+st1*6]/CAUPD;
-                zp = yhonedt[2+pl*6]/CAUPD;
-                zb = baryc[2]/CAUPD;
-                zb2 = baryc2[2]/CAUPD;
-                zs -= zb;
-                zp -= zb2;
-                dt1 = zs;
-                dt2 = -zp;
-                dt = dt1+dt2;
-                
-                dist = sqrt( pow( (yhonedt[0+pl*6]-yhone[0+st1*6]-starimage[0]), 2) + pow( (yhonedt[1+pl*6]-yhone[1+st1*6]-starimage[1]), 2) ); 
-                vtrans = sqrt(pow(yhonedt[3+pl*6]-yhone[3+st1*6] - starimage[3],2) + pow(yhonedt[4+pl*6]-yhone[4+st1*6] - starimage[4],2)); 
-              } else {
-                dist = sqrt( pow( (yhone[0+pl*6]-yhone[0+stm1*6]), 2) + pow( (yhone[1+pl*6]-yhone[1+stm1*6]), 2) ); 
-                vtrans = sqrt(pow(yhone[3+pl*6]-yhone[3+stm1*6], 2) + pow(yhone[4+pl*6]-yhone[4+stm1*6], 2)); 
-                //dist = sqrt( pow( (yhonedt[0+pl*6]-yhone[0+st1*6]), 2) + pow( (yhonedt[1+pl*6]-yhone[1+st1*6]), 2) ); 
-                //vtrans = sqrt(pow(yhonedt[3+pl*6]-yhone[3+st1*6], 2) + pow(yhonedt[4+pl*6]-yhone[4+st1*6], 2)); 
-                zs=0;
-                zb2=0;
-              }
-    
-              t2 = thone + zs;
-    
-#if ( demcmc_compile == 0 )//|| demcmc_compile == 3) 
-              fprintf(directory[st1][pl+1], "%6d  %.18e  %.10e  %.10e\n", transitcount[st1][pl+1], t2, dist, vtrans);
-#endif
-
-
-              double vplanet, toffset, tinit, tfin;
-              long ic, nc, ac;
-              double thone0, hold;
-
-              vplanet = fmax(vtrans, 0.0001);
-              toffset = offsetmult*(rstar*(rad[st1]+rad[pl]))*RSUNAU/vplanet;
-              toffset = fmin(toffset, offsetminout);
-              tinit = t2 - toffset;
-              tfin = t2 + toffset;
-              ic=0;
-              while (ic<(kk-1) && timelist[ic]<tinit) ic++; 
-              nc=0;
-              while ((ic+nc)<(kk-1) && timelist[ic+nc]<tfin) nc++;
-
-              seteq(npl, yhone0, yhone);
-              thone0=thone;
-              hold=h;
-
-              //This is fairly inexact for first time if yhone_Z is changing considerably Can try to fix this in future versions. 
-              for (ac=0; ac<nc; ac++) {
-                if (whereplanets[st1][ic+ac][pl+1] == 0) { // i.e. if this body's location not already computed
-
-                  int tnum;
-                  double tcur, ts1, ts2;
-
-                  tnum = numplanets[st1][ic+ac];
-                  tcur = timelist[ic+ac] - zs;
-                  ts1 = (tcur-thone);
-                  if (fabs(ts1) > fabs(h)) {
-                    h = fabs(h)*fabs(ts1)/ts1;
-                  } else {
-                    h = ts1;
-                  }
-                  while ( !(status!=GSL_SUCCESS) && !(dbleq(tcur, thone)) ){
-                    status = gsl_odeiv_evolve_apply(e, c, s, &sys, &thone, tcur, &h, yhone); 
-                  }
-                  if (LTE) {
-                    ts2 = (tcur+dt)-thonedt;
-                    if (fabs(ts2) > fabs(h)) {
-                      h = fabs(h)*fabs(ts2)/ts2;
-                    } else {
-                      h = ts2;
-                    }
-                    while ( !(status!=GSL_SUCCESS) && !(dbleq(tcur+dt, thonedt)) ){
-                      status = gsl_odeiv_evolve_apply(e, c, s, &sys, &thonedt, tcur+dt, &h, yhonedt); 
-                    }
-                  }
-                  if (status != GSL_SUCCESS) {
-                    printf("Big problem\n");
-                    exit(0);
-                  }
-      
-                  if (LTE) {
-                    for (j=0; j<6; j++) {
-                      baryc[j] = 0.;
-                      baryc2[j] = 0.;
-                      for (i=0; i<npl; i++) {
-                        baryc[j] += yhone[j+i*6]*mu[i+1];
-                        baryc2[j] += yhonedt[j+i*6]*mu[i+1];
-                      }
-                      baryc[j] /= mtot;
-                      baryc2[j] /= mtot;
-         
-                      starimage[j] = baryc2[j]-baryc[j];
-                    }
-         
-                    zs = yhone[2+st1*6]/CAUPD;
-                    zp = yhonedt[2+pl*6]/CAUPD;
-                    zb = baryc[2]/CAUPD;
-                    zb2 = baryc2[2]/CAUPD;
-                    zs -= zb;
-                    zp -= zb2;
-                    dt1 = zs;
-                    dt2 = -zp;
-                    dt = dt1+dt2;
-                  }
- 
-                  if (yhone[2+st1*6] > yhone[2+pl*6]) {
-
-                    whereplanets[st1][ic+ac][pl+1] = 1;
-                    numplanets[st1][ic+ac]+=1;
-                    tranarray[st1][ic+ac][tnum][0] = rad[pl]*rstar*RSUNAU;
-
-                    if (LTE) {
-
-                      tranarray[st1][ic+ac][tnum][1] = yhonedt[0+pl*6] - yhone[0+st1*6] - starimage[0];
-                      tranarray[st1][ic+ac][tnum][2] = yhonedt[1+pl*6] - yhone[1+st1*6] - starimage[1];
-                    
-                    } else {
-                    
-                      tranarray[st1][ic+ac][tnum][1] = yhone[0+pl*6] - yhone[0+st1*6];
-                      tranarray[st1][ic+ac][tnum][2] = yhone[1+pl*6] - yhone[1+st1*6];
-
-                    }
-                  }
-                } 
-              }
-
-              seteq(npl, yhone, yhone0);
-              thone=thone0;
-              h=hold;
-            }
-          }
-        }
-      }
-    }
-  }
-
-
-
-
-  seteq(npl, y, yin);
-  for(pl=0; pl<npl; pl++) dp[0][pl]=y[0+pl*6]*y[3+pl*6]+y[1+pl*6]*y[4+pl*6];
-  for (i=1; i<brights; i++) {
-      for(pl=0; pl<npl; pl++) {
-          dp[i][pl]=(y[0+pl*6]-y[0+(i-1)*6])*y[3+pl*6] + (y[1+pl*6]-y[1+(i-1)*6])*y[4+pl*6];
-      }
-  }
-  t = tstart;
-  h = -HStart;
-  for (k=0; k<brights; k++) {
-    for(pl=0; pl<(npl+1); pl++) transitcount[k][pl] = 0;
-  }
-    
-
-  if (RVS) {
-    rvcount = startrvcount-1;
-  }
-
-
-
-  while (t > t0+1) {
-
-    if (RVS) {
-      onrv=0;
-      if ( (h + t) < rvtarr[rvcount]) {  
-        onrv = 1;
-        hhere = h;
-        h = rvtarr[rvcount] - t;
+    if (INCPRIOR) {
+      int i0;
+      for (i0=0; i0<npl; i0++) {
+        neg2logliketemp += -2.0*log( sin(p0local[i*pperwalker+i0*pperplan+4] *M_PI/180.) ); 
       }
     }
 
-    int status = gsl_odeiv_evolve_apply (e, c, s,
-                                         &sys, 
-                                         &t, t0,
-                                         &h, y);
+  free(evector);
 
-    if (status != GSL_SUCCESS)
-        break;
-
-    if (RVS) {
-       if (onrv ==1) {
-         h = hhere;
-         func(t, y, dydt, mu);
-         double vstar = 0;
-         for (i=0; i<npl; i++) {
-           vstar += -y[i*6+5]*mu[i+1]/mtot;
-         }
-         if (tve[3][rvcount] == 0) {
-           rvarr[rvcount] = vstar; 
-         } else {
-           rvarr[rvcount] = vstar + y[(((int) tve[3][rvcount])-1)*6+5];
-         }
-         rvcount += 1;
-       }
-    }
-
-    dist2 = pow(y[0],2)+pow(y[1],2)+pow(y[2],2);
-
-    for(pl=0; pl<npl; pl++) {  /* Cycle through the planets, searching for a transit. */
-        dpold[0][pl]=dp[0][pl];
-        dp[0][pl]=y[0+pl*6]*y[3+pl*6]+y[1+pl*6]*y[4+pl*6];
-        ps2=y[0+pl*6]*y[0+pl*6]+y[1+pl*6]*y[1+pl*6];
-
-      if( dp[0][pl]*dpold[0][pl] <= 0 && ps2 < dist2/dist2divisor && y[2+pl*6]<0 && brights>1) { 
-                     // A minimum projected-separation occurred: "Tc".  
-                //   ps2 constraint makes sure it's when y^2+z^2 is small-- its on the face of the star.  
-                  //   y[2] constraint means a primary eclipse, presuming that the observer is on the positive x=y[2] axis.
-
-        seteq(npl, yhone, y);
-        thone = t;
-
-        if (LTE) {
-          ii=0;
-          dt = -yhone[2+pl*6] / CAUPD;
-          seteq(npl, yhonedt, yhone);
-          gsl_odeiv_step_apply (s, thone, dt, yhonedt, yerrhone, NULL, NULL, &sys);
-          thonedt = thone+dt;
- 
-          do {
-            func(thone, yhone, dydt, npl_mu);
-            func(thonedt, yhonedt, dydtdt, npl_mu);
- 
-            for (j=0; j<6; j++) {
-              baryc[j] = 0.;
-              baryc2[j] = 0.;
-              dbarycdt[j] = 0.;
-              dbarycdt2[j] = 0.;
-              for (i=0; i<npl; i++) {
-                baryc[j] += yhone[j+i*6]*mu[i+1];
-                baryc2[j] += yhonedt[j+i*6]*mu[i+1];
-                dbarycdt[j] += dydt[j+i*6]*mu[i+1];
-                dbarycdt2[j] += dydtdt[j+i*6]*mu[i+1];
-              }
-              baryc[j] /= mtot;
-              baryc2[j] /= mtot;
-              dbarycdt[j] /= mtot;
-              dbarycdt2[j] /= mtot;
- 
-              starimage[j] = baryc2[j]-baryc[j];
-              dstarimagedt[j] = dbarycdt2[j]-dbarycdt[j];
-            }
- 
-            dp[0][pl] = (yhonedt[0+pl*6]-starimage[0])*(yhonedt[3+pl*6]-starimage[3]) + (yhonedt[1+pl*6]-starimage[1])*(yhonedt[4+pl*6]-starimage[4]);
-            double ddpdt = (dydtdt[0+pl*6]-dstarimagedt[0])*(dydtdt[0+pl*6]-dstarimagedt[0]) + (dydtdt[1+pl*6]-dstarimagedt[1])*(dydtdt[1+pl*6]-dstarimagedt[1]) + (yhonedt[0+pl*6]-starimage[0])*(dydtdt[3+pl*6]-dstarimagedt[3]) + (yhonedt[1+pl*6]-starimage[1])*(dydtdt[4+pl*6]-dstarimagedt[4]);
- 
- 
-            zs = 0.0;
-            zp = yhonedt[2+pl*6]/CAUPD;
-            zb = baryc[2]/CAUPD;
-            zb2 = baryc2[2]/CAUPD;
-            zs -= zb;
-            zp -= zb2;
-            dt1 = zs;
-            dt2 = -zp;
-            dt = dt1+dt2;
-            
-            tstep = - dp[0][pl]/ddpdt;
-            gsl_odeiv_step_apply (s, thone, tstep, yhone, yerrhone, NULL, NULL, &sys);
-            seteq(npl, yhonedt, yhone);
-            gsl_odeiv_step_apply (s, thone, dt, yhonedt, yerrhone, NULL, NULL, &sys);
-            thone += tstep;
-            thonedt = thone+dt;
-            ii++;
- 
-          } while (ii<10 && fabs(tstep)>eps);
-
-          dist = sqrt( pow( (yhonedt[0+pl*6]-starimage[0]), 2) + pow( (yhonedt[1+pl*6]-starimage[1]), 2) ); 
- 
-        } else {
-
-          ii=0;
-          do {
-            func (thone, yhone, dydt, npl_mu);
-            ddpdt = dydt[0+pl*6]*dydt[0+pl*6] + dydt[1+pl*6]*dydt[1+pl*6] + yhone[0+pl*6]*dydt[3+pl*6] + yhone[1+pl*6]*dydt[4+pl*6];
-            tstep = - dp[0][pl] / ddpdt;
-            gsl_odeiv_step_apply (s, thone, tstep, yhone, yerrhone, dydt, NULL, &sys);
-            thone += tstep;
-            dp[0][pl]=yhone[0+pl*6]*yhone[3+pl*6]+yhone[1+pl*6]*yhone[4+pl*6];
-            ii++;
-          } while (ii<5 && fabs(tstep)>eps);
-            
-          dist = sqrt(pow(yhone[0+pl*6],2)+pow(yhone[1+pl*6],2));
-
-        }
-
-        dp[0][pl]=y[0+pl*6]*y[3+pl*6]+y[1+pl*6]*y[4+pl*6];
-
-        if (dist < 2.0*((rstar + rstar*rad[pl])*RSUNAU)) {
-
-          transitcount[0][pl+1] -= 1;  // Update the transit number. 
-
-          if (LTE) {
-            for (j=0; j<6; j++) {
-              baryc[j] = 0.;
-              baryc2[j] = 0.;
-              for (i=0; i<npl; i++) {
-                baryc[j] += yhone[j+i*6]*mu[i+1];
-                baryc2[j] += yhonedt[j+i*6]*mu[i+1];
-              }
-              baryc[j] /= mtot;
-              baryc2[j] /= mtot;
- 
-              starimage[j] = baryc2[j]-baryc[j];
-            }
- 
-            zs = 0.0;
-            zp = yhonedt[2+pl*6]/CAUPD;
-            zb = baryc[2]/CAUPD;
-            zb2 = baryc2[2]/CAUPD;
-            zs -= zb;
-            zp -= zb2;
-            dt1 = zs;
-            dt2 = -zp;
-            dt = dt1+dt2;
- 
-            dist = sqrt( pow( yhonedt[0+pl*6] - starimage[0], 2) + pow( yhonedt[1+pl*6] - starimage[1], 2) ); 
-            vtrans = sqrt( pow( yhonedt[3+pl*6] - starimage[3], 2) + pow( yhonedt[4+pl*6] - starimage[4], 2) ); 
-          } else {
-            dist = sqrt(pow(yhone[0+pl*6],2)+pow(yhone[1+pl*6],2));
-            vtrans = sqrt(pow(yhone[3+pl*6],2)+pow(yhone[4+pl*6],2)); 
-            zs=0;
-            zb2=0;
-          }
-
-          t2 =  thone + zs;
-
-#if ( demcmc_compile == 0 )//|| demcmc_compile == 3) 
-          fprintf(directory[0][pl+1], "%6d  %.18e  %.10e  %.10e\n", transitcount[0][pl+1], t2, dist, vtrans);
-#endif
-
-          double vplanet, toffset, tinit, tfin;
-          long ic, nc, ac;
-          double thone0, hold;
-
-          vplanet = fmax(vtrans, 0.0001); // can't divide by 0, so set min value. 
-          toffset = offsetmult*(rstar*(1+rad[pl]))*RSUNAU/vplanet;
-          toffset = fmin(toffset, offsetmin);
-          tinit = t2 - toffset;
-          tfin = t2 + toffset;
-          ic=0;
-          while (ic<(kk-1) && timelist[ic]<tinit) {
-            ic++;
-          } 
-          nc=0;
-          while ((ic+nc)<(kk-1) && timelist[ic+nc]<tfin) {
-            nc++;
-          }
-          seteq(npl, yhone0, yhone);
-          thone0=thone;
-          hold=h;
-
-          for (ac=0; ac<nc; ac++) {
-
-            if (whereplanets[0][ic+ac][pl+1] == 0) { // i.e. if this body's location not already computed
- 
-              int tnum;
-              double tcur, ts1, ts2;
-
-              tnum = numplanets[0][ic+ac];
-              // stellar time 
-              tcur = timelist[ic+ac] - zs;
-              ts1 = (tcur-thone);
-              if (fabs(ts1) > fabs(h)) {
-                h = fabs(h)*fabs(ts1)/ts1;
-              } else {
-                h = ts1;
-              }
-              while ( !(status!=GSL_SUCCESS) && !(dbleq(tcur, thone)) ){
-                status = gsl_odeiv_evolve_apply(e, c, s, &sys, &thone, tcur, &h, yhone); 
-              }
-              if (LTE) {
-                ts2 = (tcur+dt)-thonedt;
-                if (fabs(ts2) > fabs(h)) {
-                  h = fabs(h)*fabs(ts2)/ts2;
-                } else {
-                  h = ts2;
-                }
-                while ( !(status!=GSL_SUCCESS) && !(dbleq(tcur+dt, thonedt)) ){
-                  status = gsl_odeiv_evolve_apply(e, c, s, &sys, &thonedt, tcur+dt, &h, yhonedt); 
-                }
-              }
-              if (status != GSL_SUCCESS) {
-                printf("Big problem\n");
-                exit(0);
-              }
-  
-              if (LTE) {
-                for (j=0; j<6; j++) {
-                  baryc[j] = 0.;
-                  baryc2[j] = 0.;
-                  for (i=0; i<npl; i++) {
-                    baryc[j] += yhone[j+i*6]*mu[i+1];
-                    baryc2[j] += yhonedt[j+i*6]*mu[i+1];
-                  }
-                  baryc[j] /= mtot;
-                  baryc2[j] /= mtot;
-     
-                  starimage[j] = baryc2[j]-baryc[j];
-                }
-     
-                zs = 0.0;
-                zp = yhonedt[2+pl*6]/CAUPD;
-                zb = baryc[2]/CAUPD;
-                zb2 = baryc2[2]/CAUPD;
-                zs -= zb;
-                zp -= zb2;
-                dt1 = zs;
-                dt2 = -zp;
-                dt = dt1+dt2;
-              }
- 
-              if (yhone[2+pl*6] < 0.0) {
-
-                whereplanets[0][ic+ac][pl+1] = 1;
-                tranarray[0][ic+ac][tnum][0] = rad[pl]*rstar*RSUNAU; 
-                numplanets[0][ic+ac]+=1;
-
-                if (LTE) {
-
-                  tranarray[0][ic+ac][tnum][1] = yhonedt[0+pl*6]-starimage[0];
-                  tranarray[0][ic+ac][tnum][2] = yhonedt[1+pl*6]-starimage[1];
-
-                } else {
-
-                  tranarray[0][ic+ac][tnum][1] = yhone[0+pl*6];
-                  tranarray[0][ic+ac][tnum][2] = yhone[1+pl*6];
-
-                }
-              } 
-            }
-          }
-          seteq(npl, yhone, yhone0);
-          thone=thone0;
-          h=hold;
-        } 
-      }
-    }
-    int st;
-    int st1;
-    for (st1=1; st1<brights; st1++) {
-      st = brightsindex[st1];
-      int stm1 = st-1;
-      dpold[st1][stm1]=dp[st1][stm1];
-      dp[st1][stm1]=y[0+stm1*6]*y[3+stm1*6]+y[1+stm1*6]*y[4+stm1*6];
-      ps2=y[0+stm1*6]*y[0+stm1*6]+y[1+stm1*6]*y[1+stm1*6];
- 
-      if( dp[st1][stm1]*dpold[st1][stm1] <= 0 && ps2 < dist2/dist2divisor && y[2+stm1*6]>0 && brights > 1) { 
-
-        seteq(npl, yhone, y);
-        thone = t;
-
-        if (LTE) {
-          ii=0;
-          dt = yhone[2+stm1*6] / CAUPD;
-          seteq(npl, yhonedt, yhone);
-          gsl_odeiv_step_apply (s, thone, dt, yhonedt, yerrhone, NULL, NULL, &sys);
-          thonedt = thone+dt;
- 
-          do {
-            func(thone, yhone, dydt, npl_mu);
-            func(thonedt, yhonedt, dydtdt, npl_mu);
- 
-            for (j=0; j<6; j++) {
-              baryc[j] = 0.;
-              baryc2[j] = 0.;
-              dbarycdt[j] = 0.;
-              dbarycdt2[j] = 0.;
-              for (i=0; i<npl; i++) {
-                baryc[j] += yhone[j+i*6]*mu[i+1];
-                baryc2[j] += yhonedt[j+i*6]*mu[i+1];
-                dbarycdt[j] += dydt[j+i*6]*mu[i+1];
-                dbarycdt2[j] += dydtdt[j+i*6]*mu[i+1];
-              }
-              baryc[j] /= mtot;
-              baryc2[j] /= mtot;
-              dbarycdt[j] /= mtot;
-              dbarycdt2[j] /= mtot;
- 
-              starimage[j] = -baryc2[j]+baryc[j];
-              dstarimagedt[j] = -dbarycdt2[j]+dbarycdt[j];
-            }
- 
-            dp[st1][stm1] = (yhone[0+stm1*6]-starimage[0])*(yhone[3+stm1*6]-starimage[3]) + (yhone[1+stm1*6]-starimage[1])*(yhone[4+stm1*6]-starimage[4]);
-            double ddpdt = (dydt[0+stm1*6]-dstarimagedt[0])*(dydt[0+stm1*6]-dstarimagedt[0]) + (dydt[1+stm1*6]-dstarimagedt[1])*(dydt[1+stm1*6]-dstarimagedt[1]) + (yhone[0+stm1*6]-starimage[0])*(dydt[3+stm1*6]-dstarimagedt[3]) + (yhone[1+stm1*6]-starimage[1])*(dydt[4+stm1*6]-dstarimagedt[4]);
- 
- 
-            zs = yhone[2+stm1*6]/CAUPD;
-            zp = 0.0;
-            zb = baryc[2]/CAUPD;
-            zb2 = baryc2[2]/CAUPD;
-            zs -= zb;
-            zp -= zb2;
-            dt1 = zs;
-            dt2 = -zp;
-            dt = dt1+dt2;
-            
-            tstep = - dp[st1][stm1]/ddpdt;
-            gsl_odeiv_step_apply (s, thone, tstep, yhone, yerrhone, NULL, NULL, &sys);
-            seteq(npl, yhonedt, yhone);
-            gsl_odeiv_step_apply (s, thone, dt, yhonedt, yerrhone, NULL, NULL, &sys);
-            thone += tstep;
-            thonedt = thone+dt;
-            ii++;
- 
-          } while (ii<10 && fabs(tstep)>eps);
-
-          dist = sqrt( pow( (yhone[0+stm1*6]-starimage[0]), 2) + pow( (yhone[1+stm1*6]-starimage[1]), 2) ); 
- 
-        } else {
-
-          ii=0;
-          do {
-            func (thone, yhone, dydt, npl_mu);
-            ddpdt = dydt[0+stm1*6]*dydt[0+stm1*6] + dydt[1+stm1*6]*dydt[1+stm1*6] + yhone[0+stm1*6]*dydt[3+stm1*6] + yhone[1+stm1*6]*dydt[4+stm1*6];
-            tstep = - dp[st1][stm1] / ddpdt;
-            gsl_odeiv_step_apply (s, thone, tstep, yhone, yerrhone, dydt, NULL, &sys);
-            thone += tstep;
-            dp[st1][stm1]=yhone[0+stm1*6]*yhone[3+stm1*6]+yhone[1+stm1*6]*yhone[4+stm1*6];
-            ii++;
-          } while (ii<5 && fabs(tstep)>eps);
-          
-          dist = sqrt(pow(yhone[0+stm1*6],2)+pow(yhone[1+stm1*6],2));
-
-        }
-
-        dp[st1][stm1]=y[0+stm1*6]*y[3+stm1*6]+y[1+stm1*6]*y[4+stm1*6];
-
-        if (dist < 2.0*((rstar + rstar*rad[stm1])*RSUNAU)) {
-
-          transitcount[st1][0] -= 1;  // Update the transit number. 
-
-          if (LTE) {
-            for (j=0; j<6; j++) {
-              baryc[j] = 0.;
-              baryc2[j] = 0.;
-              for (i=0; i<npl; i++) {
-                baryc[j] += yhone[j+i*6]*mu[i+1];
-                baryc2[j] += yhonedt[j+i*6]*mu[i+1];
-              }
-              baryc[j] /= mtot;
-              baryc2[j] /= mtot;
- 
-              starimage[j] = -baryc2[j]+baryc[j];
-            }
-            zs = yhone[2+stm1*6]/CAUPD;
-            zp = 0.0;
-            zb = baryc[2]/CAUPD;
-            zb2 = baryc2[2]/CAUPD;
-            zs -= zb;
-            zp -= zb2;
-            dt1 = zs;
-            dt2 = -zp;
-            dt = dt1+dt2;
-            
-            dist = sqrt( pow( yhone[0+stm1*6] - starimage[0], 2) + pow( yhone[1+stm1*6] - starimage[1], 2) ); 
-            vtrans = sqrt( pow( yhone[3+stm1*6] - starimage[3], 2) + pow( yhone[4+stm1*6] - starimage[4], 2) ); 
-          } else {
-            dist = sqrt(pow(yhone[0+stm1*6],2)+pow(yhone[1+stm1*6],2));
-            vtrans = sqrt(pow(yhone[3+stm1*6],2)+pow(yhone[4+stm1*6],2)); 
-            zs=0;
-            zb2=0;
-          }
-
-          t2 = thone + zs;
-
-#if ( demcmc_compile == 0 )//|| demcmc_compile == 3) 
-          fprintf(directory[st1][0], "%6d  %.18e  %.10e  %.10e\n", transitcount[st1][0], t2, dist, vtrans);
-#endif
-
-          double vplanet, toffset, tinit, tfin;
-          long ic, nc, ac;
-          double thone0, hold;
-
-          vplanet = fmax(vtrans, 0.0001);
-          toffset = offsetmult*(rstar*(1+rad[stm1]))*RSUNAU/vplanet;
-          toffset = fmin(toffset, offsetmin);
-          tinit = t2 - toffset;
-          tfin = t2 + toffset;
-          ic=0;
-          while (ic<(kk-1) && timelist[ic]<tinit) {
-            ic++;
-          } 
-          nc=0;
-          while ((ic+nc)<(kk-1) && timelist[ic+nc]<tfin) {
-            nc++;
-          }
-          seteq(npl, yhone0, yhone);
-          thone0=thone;
-          hold=h;
-
-          for (ac=0; ac<nc; ac++) {
-
-            if (whereplanets[st1][ic+ac][0] == 0) { // i.e. if this body's location not already computed
- 
-              int tnum;
-              double tcur, ts1, ts2;
-
-              tnum = numplanets[st1][ic+ac];
-              // stellar time 
-              tcur = timelist[ic+ac] - zs;
-              ts1 = (tcur-thone);
-              if (fabs(ts1) > fabs(h)) {
-                h = fabs(h)*fabs(ts1)/ts1;
-              } else {
-                h = ts1;
-              }
-              while ( !(status!=GSL_SUCCESS) && !(dbleq(tcur, thone)) ){
-                status = gsl_odeiv_evolve_apply(e, c, s, &sys, &thone, tcur, &h, yhone); 
-              }
-              if (LTE) {
-                ts2 = (tcur+dt)-thonedt;
-                if (fabs(ts2) > fabs(h)) {
-                  h = fabs(h)*fabs(ts2)/ts2;
-                } else {
-                  h = ts2;
-                }
-                while ( !(status!=GSL_SUCCESS) && !(dbleq(tcur+dt, thonedt)) ){
-                  status = gsl_odeiv_evolve_apply(e, c, s, &sys, &thonedt, tcur+dt, &h, yhonedt); 
-                }
-              }
-              if (status != GSL_SUCCESS) {
-                printf("Big problem\n");
-                exit(0);
-              }
-  
-              if (LTE) {
-                for (j=0; j<6; j++) {
-                  baryc[j] = 0.;
-                  baryc2[j] = 0.;
-                  for (i=0; i<npl; i++) {
-                    baryc[j] += yhone[j+i*6]*mu[i+1];
-                    baryc2[j] += yhonedt[j+i*6]*mu[i+1];
-                  }
-                  baryc[j] /= mtot;
-                  baryc2[j] /= mtot;
-     
-                  starimage[j] = -baryc2[j]+baryc[j];
-                }
-                zs = yhone[2+stm1*6]/CAUPD;
-                zp = 0.0;
-                zb = baryc[2]/CAUPD;
-                zb2 = baryc2[2]/CAUPD;
-                zs -= zb;
-                zp -= zb2;
-                dt1 = zs;
-                dt2 = -zp;
-                dt = dt1+dt2;
-              }
- 
-              if (yhone[2+stm1*6] > 0.0) {
-
-                whereplanets[st1][ic+ac][0] = 1;
-                tranarray[st1][ic+ac][tnum][0] = rstar*RSUNAU; 
-                numplanets[st1][ic+ac]+=1;
-
-                if (LTE) {
-
-                  tranarray[st1][ic+ac][tnum][1] = -(yhone[0+stm1*6]-starimage[0]);
-                  tranarray[st1][ic+ac][tnum][2] = -(yhone[1+stm1*6]-starimage[1]);
-
-                } else {
-
-                  tranarray[st1][ic+ac][tnum][1] = -yhone[0+stm1*6];
-                  tranarray[st1][ic+ac][tnum][2] = -yhone[1+stm1*6];
-
-                }
-              } 
-            }
-          }
-          seteq(npl, yhone, yhone0);
-          thone=thone0;
-          h=hold;
-        } 
-      }
-      for (pl=0; pl<npl; pl++) {
-        if (pl != stm1) {
-             dpold[st1][pl]=dp[st1][pl];
-          dp[st1][pl]=(y[0+pl*6]-y[0+stm1*6])*(y[3+pl*6]-y[3+stm1*6]) + (y[1+pl*6]-y[1+stm1*6])*(y[4+pl*6]-y[4+stm1*6]);
-          ps2=pow((y[0+pl*6]-y[0+stm1*6]),2) + pow((y[1+pl*6]-y[1+stm1*6]),2);
-
-          if (dp[st1][pl]*dpold[st1][pl] <= 0 && ps2 < dist2/dist2divisor && y[2+stm1*6]>y[2+pl*6] && brights > 1) { 
-    
-                seteq(npl, yhone, y);
-                thone = t;
-    
-            if (LTE) {
-              ii=0;
-              dt = -(yhone[2+pl*6] - yhone[2+stm1*6]) / CAUPD;
-              seteq(npl, yhonedt, yhone);
-              gsl_odeiv_step_apply (s, thone, dt, yhonedt, yerrhone, NULL, NULL, &sys);
-              thonedt = thone+dt;
-     
-              do {
-                func(thone, yhone, dydt, npl_mu);
-                func(thonedt, yhonedt, dydtdt, npl_mu);
-     
-                for (j=0; j<6; j++) {
-                  baryc[j] = 0.;
-                  baryc2[j] = 0.;
-                  dbarycdt[j] = 0.;
-                  dbarycdt2[j] = 0.;
-                  for (i=0; i<npl; i++) {
-                    baryc[j] += yhone[j+i*6]*mu[i+1];
-                    baryc2[j] += yhonedt[j+i*6]*mu[i+1];
-                    dbarycdt[j] += dydt[j+i*6]*mu[i+1];
-                    dbarycdt2[j] += dydtdt[j+i*6]*mu[i+1];
-                  }
-                  baryc[j] /= mtot;
-                  baryc2[j] /= mtot;
-                  dbarycdt[j] /= mtot;
-                  dbarycdt2[j] /= mtot;
-    
-                  //starimage should really be starshift here
-                  starimage[j] = baryc2[j]-baryc[j];
-                  dstarimagedt[j] = dbarycdt2[j]-dbarycdt[j];
-                }
-    
-                dp[st1][pl] = (yhonedt[0+pl*6]-yhone[0+stm1*6]-starimage[0])*(yhonedt[3+pl*6]-yhone[3+stm1*6]-starimage[3]) + (yhonedt[1+pl*6]-yhone[1+stm1*6]-starimage[1])*(yhonedt[4+pl*6]-yhone[4+stm1*6]-starimage[4]);
-                double ddpdt = (dydtdt[0+pl*6]-dydt[0+stm1*6]-dstarimagedt[0])*(dydtdt[0+pl*6]-dydt[0+stm1*6]-dstarimagedt[0]) + (dydtdt[1+pl*6]-dydt[1+stm1*6]-dstarimagedt[1])*(dydtdt[1+pl*6]-dydt[1+stm1*6]-dstarimagedt[1]) + (yhonedt[0+pl*6]-yhone[0+stm1*6]-starimage[0])*(dydtdt[3+pl*6]-dydt[3+stm1*6]-dstarimagedt[3]) + (yhonedt[1+pl*6]-yhone[1+stm1*6]-starimage[1])*(dydt[4+pl*6]-dydt[4+stm1*6]-dstarimagedt[4]);
-     
-     
-                zs = yhone[2+stm1*6]/CAUPD;
-                zp = yhonedt[2+pl*6]/CAUPD;
-                zb = baryc[2]/CAUPD;
-                zb2 = baryc2[2]/CAUPD;
-                zs -= zb;
-                zp -= zb2;
-                dt1 = zs;
-                dt2 = -zp;
-                dt = dt1+dt2;
-                
-                tstep = - dp[st1][pl]/ddpdt;
-                gsl_odeiv_step_apply (s, thone, tstep, yhone, yerrhone, NULL, NULL, &sys);
-                seteq(npl, yhonedt, yhone);
-                gsl_odeiv_step_apply (s, thone, dt, yhonedt, yerrhone, NULL, NULL, &sys);
-                thone += tstep;
-                thonedt = thone+dt;
-                ii++;
-     
-              } while (ii<10 && fabs(tstep)>eps);
-                
-              dist = sqrt( pow( (yhonedt[0+pl*6]-yhone[0+stm1*6]-starimage[0]), 2) + pow( (yhonedt[1+pl*6]-yhone[1+stm1*6]-starimage[1]), 2) ); 
-     
-            } else {
-    
-              ii=0;
-              do {
-                func (thone, yhone, dydt, npl_mu);
-                //ddpdt = dydt[0+pl*6]*dydt[0+pl*6] + dydt[1+pl*6]*dydt[1+pl*6] + yhone[0+pl*6]*dydt[3+pl*6] + yhone[1+pl*6]*dydt[4+pl*6];
-                ddpdt = (dydt[0+pl*6]-dydt[0+stm1*6])*(dydt[0+pl*6]-dydt[0+stm1*6]) + (dydt[1+pl*6]-dydt[1+stm1*6])*(dydt[1+pl*6]-dydt[1+stm1*6]) + (yhone[0+pl*6]-yhone[0+stm1*6])*(dydt[3+pl*6]-dydt[3+stm1*6]) + (yhone[1+pl*6]-yhone[1+stm1*6])*(dydt[4+pl*6]-dydt[4+stm1*6]);
-                tstep = - dp[st1][pl] / ddpdt;
-                gsl_odeiv_step_apply (s, thone, tstep, yhone, yerrhone, dydt, NULL, &sys);
-                thone += tstep;
-                    //dp[st1][pl]=yhone[0+pl*6]*yhone[3+pl*6]+yhone[1+pl*6]*yhone[4+pl*6];
-                dp[st1][pl]=(yhone[0+pl*6]-yhone[0+stm1*6])*(yhone[3+pl*6]-yhone[3+stm1*6]) + (yhone[1+pl*6]-yhone[1+stm1*6])*(yhone[4+pl*6]-yhone[4+stm1*6]);
-                ii++;
-              } while (ii<5 && fabs(tstep)>eps);
-                
-              //dist = sqrt( pow( (yhonedt[0+pl*6]-yhone[0+stm1*6]), 2) + pow( (yhonedt[1+pl*6]-yhone[1+stm1*6]), 2) ); 
-              dist = sqrt( pow( (yhone[0+pl*6]-yhone[0+stm1*6]), 2) + pow( (yhone[1+pl*6]-yhone[1+stm1*6]), 2) ); 
-    
-            }
-    
-            dp[st1][pl]=(y[0+pl*6]-y[0+stm1*6])*(y[3+pl*6]-y[3+stm1*6]) + (y[1+pl*6]-y[1+stm1*6])*(y[4+pl*6]-y[4+stm1*6]);
-    
-            if (dist < 2.0*((rstar*rad[stm1] + rstar*rad[pl])*RSUNAU)) {
-    
-              transitcount[st1][pl+1] -= 1;  // Update the transit number. 
-    
-              if (LTE) {
-                for (j=0; j<6; j++) {
-                  baryc[j] = 0.;
-                  baryc2[j] = 0.;
-                  for (i=0; i<npl; i++) {
-                    baryc[j] += yhone[j+i*6]*mu[i+1];
-                    baryc2[j] += yhonedt[j+i*6]*mu[i+1];
-                  }
-                  baryc[j] /= mtot;
-                  baryc2[j] /= mtot;
-     
-                  starimage[j] = baryc2[j]-baryc[j];
-                }
-                zs = yhone[2+stm1*6]/CAUPD;
-                zp = yhonedt[2+pl*6]/CAUPD;
-                zb = baryc[2]/CAUPD;
-                zb2 = baryc2[2]/CAUPD;
-                zs -= zb;
-                zp -= zb2;
-                dt1 = zs;
-                dt2 = -zp;
-                dt = dt1+dt2;
-                
-                dist = sqrt( pow( (yhonedt[0+pl*6]-yhone[0+stm1*6]-starimage[0]), 2) + pow( (yhonedt[1+pl*6]-yhone[1+stm1*6]-starimage[1]), 2) ); 
-                vtrans = sqrt(pow(yhonedt[3+pl*6]-yhone[3+stm1*6] - starimage[3],2) + pow(yhonedt[4+pl*6]-yhone[4+stm1*6] - starimage[4],2)); 
-              } else {
-                //dist = sqrt( pow( (yhonedt[0+pl*6]-yhone[0+stm1*6]), 2) + pow( (yhonedt[1+pl*6]-yhone[1+stm1*6]), 2) ); 
-                //vtrans = sqrt(pow(yhonedt[3+pl*6]-yhone[3+stm1*6], 2) + pow(yhonedt[4+pl*6]-yhone[4+stm1*6], 2)); 
-                dist = sqrt( pow( (yhone[0+pl*6]-yhone[0+stm1*6]), 2) + pow( (yhone[1+pl*6]-yhone[1+stm1*6]), 2) ); 
-                vtrans = sqrt(pow(yhone[3+pl*6]-yhone[3+stm1*6], 2) + pow(yhone[4+pl*6]-yhone[4+stm1*6], 2)); 
-                zs=0;
-                zb2=0;
-              }
-    
-              t2 = thone + zs;
-    
-#if ( demcmc_compile == 0 )//|| demcmc_compile == 3) 
-              fprintf(directory[st1][pl+1], "%6d  %.18e  %.10e  %.10e\n", transitcount[st1][pl+1], t2, dist, vtrans);
-#endif
-
-
-              double vplanet, toffset, tinit, tfin;
-              long ic, nc, ac;
-              double thone0, hold;
-
-              vplanet = fmax(vtrans, 0.0001);
-              toffset = offsetmult*(rstar*(rad[stm1]+rad[pl]))*RSUNAU/vplanet;
-              toffset = fmin(toffset, offsetminout);
-              tinit = t2 - toffset;
-              tfin = t2 + toffset;
-              ic=0;
-              while (ic<(kk-1) && timelist[ic]<tinit) ic++; 
-              nc=0;
-              while ((ic+nc)<(kk-1) && timelist[ic+nc]<tfin) nc++;
-
-              seteq(npl, yhone0, yhone);
-              thone0=thone;
-              hold=h;
-
-              //This is fairly inexact for first time if yhone_Z is changing considerably Can try to fix this in future versions. 
-              for (ac=0; ac<nc; ac++) {
-                if (whereplanets[st1][ic+ac][pl+1] == 0) { // i.e. if this body's location not already computed
-
-                  int tnum;
-                  double tcur, ts1, ts2;
-
-                  tnum = numplanets[st1][ic+ac];
-                  tcur = timelist[ic+ac] - zs;
-                  ts1 = (tcur-thone);
-                  if (fabs(ts1) > fabs(h)) {
-                    h = fabs(h)*fabs(ts1)/ts1;
-                  } else {
-                    h = ts1;
-                  }
-                  while ( !(status!=GSL_SUCCESS) && !(dbleq(tcur, thone)) ){
-                    status = gsl_odeiv_evolve_apply(e, c, s, &sys, &thone, tcur, &h, yhone); 
-                  }
-                  if (LTE) {
-                    ts2 = (tcur+dt)-thonedt;
-                    if (fabs(ts2) > fabs(h)) {
-                      h = fabs(h)*fabs(ts2)/ts2;
-                    } else {
-                      h = ts2;
-                    }
-                    while ( !(status!=GSL_SUCCESS) && !(dbleq(tcur+dt, thonedt)) ){
-                      status = gsl_odeiv_evolve_apply(e, c, s, &sys, &thonedt, tcur+dt, &h, yhonedt); 
-                    }
-                  }
-                  if (status != GSL_SUCCESS) {
-                    printf("Big problem\n");
-                    exit(0);
-                  }
-      
-                  if (LTE) {
-                    for (j=0; j<6; j++) {
-                      baryc[j] = 0.;
-                      baryc2[j] = 0.;
-                      for (i=0; i<npl; i++) {
-                        baryc[j] += yhone[j+i*6]*mu[i+1];
-                        baryc2[j] += yhonedt[j+i*6]*mu[i+1];
-                      }
-                      baryc[j] /= mtot;
-                      baryc2[j] /= mtot;
-         
-                      starimage[j] = baryc2[j]-baryc[j];
-                    }
-         
-                    zs = yhone[2+stm1*6]/CAUPD;
-                    zp = yhonedt[2+pl*6]/CAUPD;
-                    zb = baryc[2]/CAUPD;
-                    zb2 = baryc2[2]/CAUPD;
-                    zs -= zb;
-                    zp -= zb2;
-                    dt1 = zs;
-                    dt2 = -zp;
-                    dt = dt1+dt2;
-                  }
- 
-                  if (yhone[2+stm1*6] > yhone[2+pl*6]) {
-
-                    whereplanets[st1][ic+ac][pl+1] = 1;
-                    numplanets[st1][ic+ac]+=1;
-                    tranarray[st1][ic+ac][tnum][0] = rad[pl]*rstar*RSUNAU;
-
-                    if (LTE) {
-
-                      tranarray[st1][ic+ac][tnum][1] = yhonedt[0+pl*6] - yhone[0+stm1*6] - starimage[0];
-                      tranarray[st1][ic+ac][tnum][2] = yhonedt[1+pl*6] - yhone[1+stm1*6] - starimage[1];
-                    
-                    } else {
-                    
-                      tranarray[st1][ic+ac][tnum][1] = yhone[0+pl*6] - yhone[0+stm1*6];
-                      tranarray[st1][ic+ac][tnum][2] = yhone[1+pl*6] - yhone[1+stm1*6];
-
-                    }
-                  }
-                } 
-              }
-
-              seteq(npl, yhone, yhone0);
-              thone=thone0;
-              h=hold;
-            }
-          }
-        }
-      }
-    }
-  }
-
-      
-
-
-
-  if (RVS) {
-    free(rvtarr);
-  }
-
-  
-#if ( demcmc_compile == 0 )//|| demcmc_compile == 3) 
-
-  for (k=0; k<brights; k++) {
-    int k1 = brightsindex[k];
-    for (i=0; i<(npl+1); i++){
-      if (i != k1) {
-        fclose(directory[k][i]);
-      }
-    }
-  }
-
-  for (k=0; k<brights; k++) {
-    free(directory[k]);
-  }
-  free(directory);
-
-#endif
-
-  
-
-  for (k=0; k <brights; k++) {
-    long kkc;
-    for (kkc=0; kkc<kk; kkc++) {
-      free(whereplanets[k][kkc]);
-    }
-    free(whereplanets[k]);
-  }
-  free(whereplanets);
-
-
-  double onetlc (int nplanets, double **rxy, double rstar, double c1, double c2); // prototype 
-
-  for (k=0; k<brights; k++) {
-    int k1 = brightsindex[k];
-    long kk1;
-    for (kk1=0; kk1<kk; kk1++) {
-      if (k==0) fluxlist[k][kk1] = onetlc(numplanets[k][kk1], tranarray[k][kk1], 1.0*rstar*RSUNAU, c1list[k1], c2list[k1]);
-      else fluxlist[k][kk1] = onetlc(numplanets[k][kk1], tranarray[k][kk1], rad[k1-1]*rstar*RSUNAU, c1list[k1], c2list[k1]);
-    }
-  }
-
-  double omdilute = 1.0-dilute;
-  long kk1;
-  for (kk1=0; kk1<kk; kk1++) {
-    netflux[kk1+1] = omdilute*brightness[0]*fluxlist[0][kk1] + dilute;
-    for (k=1; k<brights; k++) {
-      int k1 = brightsindex[k];
-      netflux[kk1+1] += omdilute*brightness[k1]*fluxlist[k][kk1];
-    }
-  }
-
-  for (k=0; k<brights; k++) {
-    long kkc; 
-    for (kkc=0; kkc<kk; kkc++) {
-      long kkcc;
-      for (kkcc=0; kkcc<posstrans; kkcc++) {
-        free(tranarray[k][kkc][kkcc]);
-      }
-      free(tranarray[k][kkc]);
-    }
-    free(tranarray[k]);    
-  }
-  free(tranarray);
-
-
-  if (cadenceswitch == 2) {
-    if (OOO) {
-      long q;
-      double *tclist = malloc((2*sofd)*kk); 
-      for (q=0; q<kk; q++) {
-        tclist[2*q] = (double) order[q];
-        tclist[2*q+1] = netflux[q];
-      }
-      qsort(tclist, kk, sofd*2, compare);
-      for (q=0; q<kk; q++) {
-        netflux[q] = tclist[2*q+1];
-      }
-      free(tclist);
-    }
-    free(order);
-  }
-
-  if (cadenceswitch == 1) {
-    long q;
-    for (q=0; q<kkorig; q++) {
-      double fsum=0;
-      for (k=0; k<nperbin; k++) {
-        fsum+=netflux[q*nperbin+k+1];
-      }
-      netflux[q+1] = fsum/nperbin;
-    }
-    kk /= nperbin;
-    free(timelist);
-  } else if (cadenceswitch == 2) {
-    long q;
-    long lccount = 0;
-    long sccount = 0;
-
-    for (q=0; q<kkorig; q++) {
-      if (cadencelist[q] == 0) {
-        netflux[q+1] = netflux[sccount+lccount*nperbin+1];
-        sccount++;
-      } else {
-        double fsum=0;
-        for (k=0; k<nperbin; k++) {
-          fsum+=netflux[sccount+lccount*nperbin+k+1];
-        }
-        netflux[q+1] = fsum/nperbin;
-        lccount++;
-      }
-    }
-    kk = kkorig;
-    free(timelist);
-  }
-
-  netflux[0]= (double) kk;
-  tmte[2]=&netflux[0];
-
-  
-  for (k=0; k<brights; k++) {
-    free(dp[k]); free(dpold[k]);
-  }  
-  free(dp); free(dpold);
-
-
-  for (k=0; k<brights; k++) {
-    free(fluxlist[k]);
-  }
-  free(fluxlist);
-  //Do not free netflux as it is being returned!!
-
-
-  for (k=0; k<brights; k++) {
-    free(transitarr[k]);
-    free(transitcount[k]);
-    free(numplanets[k]);
-  }
-  free(transitarr);
-  free(ntransits);
-  free(transitcount);
-  free(numplanets);
-  free(brightsindex);
-
-  free(rad); 
-
-  gsl_odeiv_evolve_free(e);
-  gsl_odeiv_control_free(c);
-  gsl_odeiv_step_free(s);
-
-
-
-  int tele;
-  int maxteles=10;
-  double *rvoffset;
-  rvoffset = malloc(maxteles*sofd);
-  if (RVS) {
-    // Compute RV offset
-    double rvdiff;
-    long vvw;
-    double weight;
-
-    long vvt=1;
-    tele=0;
-    while (vvt<(vv+1)) {
-      double numerator = 0;
-      double denominator = 0;
-      for (vvw=1; vvw<(vv+1); vvw++) {
-        if ( (int) tve[4][vvw] == tele ) {
-          rvdiff = rvarr[vvw] - tve[1][vvw];
-          weight = 1.0 / pow(tve[2][vvw], 2);
-          numerator += rvdiff*weight;
-          denominator += weight;
-        }
-      }
-      rvoffset[tele] = numerator/denominator;
-      for (vvw=1; vvw<(vv+1); vvw++) {
-        if ( (int) tve[4][vvw] == tele ) {
-          rvarr[vvw] -= rvoffset[tele];
-          vvt+=1;
-        }
-      }
-      tele+=1;
-    }
-  }
-
-
-
-
-  double **rvtmte = malloc(4*sofds);
-
-  rvtmte[0] = &tve[0][0];
-  rvtmte[1] = &tve[1][0];
-  rvtmte[3] = &tve[2][0];
-  rvtmte[2] = rvarr;
-
-
-#if (demcmc_compile==0)
-
-  char tmtefstr[1000];
-  strcpy(tmtefstr, "lc_");
-  strcat(tmtefstr, OUTSTR);
-  strcat(tmtefstr, ".lcout");
-  FILE *tmtef = fopen(tmtefstr, "a");
-  long ijk;
-  if (CADENCESWITCH==2) {
-    for (ijk=1; ijk<=kk; ijk++) {
-      fprintf(tmtef, "%.12lf %.12lf %.12lf %.12lf %i\n", tmte[0][ijk], tmte[1][ijk], tmte[2][ijk], tmte[3][ijk], cadencelist[ijk-1]);
-    }
-  } else {
-    for (ijk=1; ijk<=kk; ijk++) {
-      fprintf(tmtef, "%lf %lf %lf %lf\n", tmte[0][ijk], tmte[1][ijk], tmte[2][ijk], tmte[3][ijk]);
-    }
-  }
-  fclose(tmtef);// = openf(tmtstr,"w");
-
-  if (RVS) {
-    for (i=0; i<nbodies; i++) {
-      if (RVARR[i]) {
-        char rvtmtefstr[1000];
-        char num[10];
-        strcpy(rvtmtefstr, "rv");
-        sprintf(num, "%01i", i);
-        strcat(rvtmtefstr, num);
-        strcat(rvtmtefstr, "_");
-        strcat(rvtmtefstr, OUTSTR);
-        strcat(rvtmtefstr, ".rvout");
-        FILE *rvtmtef = fopen(rvtmtefstr, "a");
-        for (ijk=1; ijk<vv+1; ijk++) {
-          if ( ((int) tve[3][ijk]) == i) {
-            fprintf(rvtmtef, "%lf\t%e\t%e\t%e\t%i\n", rvtmte[0][ijk], rvtmte[1][ijk]/MPSTOAUPD, rvtmte[2][ijk]/MPSTOAUPD, rvtmte[3][ijk]/MPSTOAUPD, (int) tve[4][ijk]);
-          }
-        }
-        int l;
-        for (l=0; l<tele; l++) fprintf(rvtmtef, "RV offset %i = %lf\n", l, rvoffset[l]/MPSTOAUPD);
-        fclose(rvtmtef);// = openf(tmtstr,"w");
-      }
-    }   
-  }
-
-
-#endif
-
-  free(rvoffset);
-
-  double ***fl_rv = malloc(2*sizeof(double**));
-  fl_rv[0] = tmte;
-  fl_rv[1] = rvtmte;
-
-  return fl_rv;
+  return neg2logliketemp;
 
 }
+
+
+
+#if (celerite_compile == 1)
+// Wrapper for computing a celerite fit and returning the effective chi^2
+double celerite_fit(double*** flux_rvs, double* p0local, int i, int rvflag, int verbose)  { 
+
+  const int npl = NPL;
+  const int pperplan = PPERPLAN;
+  const int pperwalker = PPERWALKER;
+  const int sofd = SOFD;
+
+  double neg2loglike;  
+
+  double *xs = flux_rvs[rvflag][0];
+  long maxil = (long) xs[0];
+  double *trueys = flux_rvs[rvflag][1];
+  double *modelys = flux_rvs[rvflag][2];
+  double *es = flux_rvs[rvflag][3];
+  double *diffys = malloc(sofd*maxil);
+  int il;
+  for (il=0; il<maxil; il++) { 
+    diffys[il] = trueys[il+1]-modelys[il+1];
+  }
+  double *yvarp = malloc(sofd*maxil);
+  for (il=0; il<maxil; il++) { 
+    yvarp[il] = es[il+1]*es[il+1]; 
+  }
+  double *xp = &xs[1]; 
+  
+  int j_real = 0;
+  int j_complex;
+  double jitter, k1, k2, k3, S0, w0, Q;
+  jitter = p0local[pperwalker*i+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE*rvflag+0];
+  S0 = p0local[pperwalker*i+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE*rvflag+1];
+  w0 = p0local[pperwalker*i+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE*rvflag+2];
+  Q = p0local[pperwalker*i+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE*rvflag+3];
+  if (Q >= 0.5) {
+    j_complex = 1;
+  } else {
+    j_complex = 2;
+  }
+  VectorXd a_real(j_real),
+          c_real(j_real),
+          a_comp(j_complex),
+          b_comp(j_complex),
+          c_comp(j_complex),
+          d_comp(j_complex);
+  if (Q >= 0.5) {
+    k1 = S0*w0*Q;
+    k2 = sqrt(4.*Q*Q - 1.);
+    k3 = w0/(2.*Q);
+    a_comp << k1;
+    b_comp << k1/k2;
+    c_comp << k3;
+    d_comp << k3*k2;
+  } else {
+    j_complex = 2;
+    k1 = 0.5*S0*w0*Q;
+    k2 = sqrt(1. - 4.*Q*Q);
+    k3 = w0/(2.*Q);
+    a_comp << k1*(1. + 1./k2), k1*(1. - 1./k2);
+    b_comp << 0., 0.;
+    c_comp << k3*(1. - k2), k3*(1. + k2);
+    d_comp << 0., 0.;
+  }
+  
+  if (verbose) {  
+    printf("%lf %lf %lf %lf\n", jitter, S0, w0, Q);
+  }
+
+  VectorXd x = VectorXd::Map(xp, maxil);
+  VectorXd yvar = VectorXd::Map(yvarp, maxil);
+  VectorXd dy = VectorXd::Map(diffys, maxil);
+  
+  celerite::solver::CholeskySolver<double> solver;
+  solver.compute(
+        jitter,
+        a_real, c_real,
+        a_comp, b_comp, c_comp, d_comp,
+        x, yvar  // Note: this is the measurement _variance_
+    );
+  
+  // see l.186-192 in celerite.py
+  double logdet, diffs, llike;
+  logdet = solver.log_determinant();
+  diffs = solver.dot_solve(dy); 
+  llike = -0.5 * (diffs + logdet); 
+  
+  neg2loglike = diffs+logdet;
+  
+  if (verbose) { 
+    printf("Celerite params:\n");
+    printf("a+comp=%25.17lf\n", a_comp[0]);
+    printf("b+comp=%25.17lf\n", b_comp[0]);
+    printf("c+comp=%25.17lf\n", c_comp[0]);
+    printf("d+comp=%25.17lf\n", d_comp[0]);
+    printf("diffs=%lf\n", diffs);
+    printf("logdet=%lf\n", logdet);
+    printf("llike=%lf\n", llike);
+  
+    VectorXd prediction = solver.predict(dy, x);
+
+    printf("predicted\n");
+ 
+    char tmtefstr[1000];
+    //memset(tmtefstr, '\0', sizeof(tmtefstr));
+    char str1[100];
+    if (rvflag) {
+      strcpy(str1, "rv");
+    } else {
+      strcpy(str1, "lc");
+    }
+    strcpy(tmtefstr, str1);
+    strcat(tmtefstr, "_");
+    strcat(tmtefstr, OUTSTR);
+    strcat(tmtefstr, ".gp_");
+    strcat(tmtefstr, str1);
+    strcat(tmtefstr, "out");
+    printf("Saving GP fit to: %s\n", tmtefstr); 
+    FILE *tmtef;
+    tmtef = fopen(tmtefstr, "a");
+    long ijk;
+    for (ijk=0; ijk<maxil; ijk++) {
+      fprintf(tmtef, "%.12lf \n", prediction[ijk]);
+    }
+    fclose(tmtef);// = openf(tmtstr,"w");
+    
+    printf("saved\n");
+  }
+
+  free(yvarp);
+  free(diffys);
+
+  return neg2loglike;
+
+}
+#endif 
+#if (celerite_compile == 0)
+// dummy function if celerite is not used to compile the code 
+double celerite_fit(double*** flux_rvs, double* p0local, int i, int rvflag, int verbose) {} 
+#endif
+ 
 
 
 
@@ -2968,11 +1207,7 @@ double ***dpintegrator_single (double ***int_in, double **tfe, double **tve, dou
       strcat(outfile2str, ".pldin");
       FILE *outfile2 = fopen(outfile2str, "a");
       fprintf(outfile2, "planet                 x                        y                      z                      v_x                   v_y                   v_z                       m                      rpors             ");
-      if (MULTISTAR) {
-        fprintf(outfile2, "brightness               c1                    c2\n");
-      } else {
-        fprintf(outfile2, "\n");
-      }
+      fprintf(outfile2, "\n");
       double pnum = 0.1;
       for (i=0; i<NPL; i++) {
         fprintf(outfile2, "%1.1lf", pnum);
@@ -3776,7 +2011,9 @@ int getinput(char fname[]) {
 
   FILE *inputf = fopen(fname, "r"); 
   if (inputf == NULL) {
-    printf("Bad Input File Name");
+    printf("Error: Bad Input File Name\n");
+    printf("       Either no file was passed (see README for usage) or\n");
+    printf("       the specified file was not found in the run directory.\n");
     exit(0);
   }
 
@@ -3794,21 +2031,48 @@ int getinput(char fname[]) {
   fgets(buffer, 1000, inputf);
 
   NPL = NBODIES-1;
+  if (NPL < 0) {
+    printf("NPL = %i\n");
+    printf("Error: At least one planet must be present.\n");
+    exit(0);
+  }
 
   fscanf(inputf, "%s %s %lf", type, varname, &EPOCH); fgets(buffer, 1000, inputf);
   fgets(buffer, 1000, inputf);
   fscanf(inputf, "%s %s %li", type, varname, &NWALKERS); fgets(buffer, 1000, inputf);
+#if (demcmc_compile == 1)
+  if (NWALKERS <= 2) {
+    printf("Error: At least 3 walkers are required for the DEMCMC algorithm to function\n");
+    exit(0);
+  }
+  int ncores;
+  MPI_Comm_size(MPI_COMM_WORLD, &ncores);
+  if ((NWALKERS % ncores) > 0) {
+    printf("ERROR: Nwalkers modulo Ncores must be 0.\n");
+    printf("       Nwalkers=%i, Ncores=%i\n", NWALKERS, ncores);
+    printf("       At least one of these must be changed.\n");
+    exit(0);
+  }
+#endif
   fgets(buffer, 1000, inputf);
   fscanf(inputf, "%s %s %li", type, varname, &NSTEPS); fgets(buffer, 1000, inputf);
   fgets(buffer, 1000, inputf);
   fscanf(inputf, "%s %s %i", type, varname, &CADENCESWITCH); fgets(buffer, 1000, inputf); 
   printf("cadenceswitch = %i\n", CADENCESWITCH);
+  if (!(CADENCESWITCH == 0 || CADENCESWITCH == 1 || CADENCESWITCH == 2)) {
+    printf("Error: Cadenceswitch takes only values of 0, 1, or 2.\n");
+    exit(0);
+  }
   fgets(buffer, 1000, inputf);
   fscanf(inputf, "%s %s %s", type, varname, TFILE); fgets(buffer, 1000, inputf); 
   fgets(buffer, 1000, inputf);
   fgets(buffer, 1000, inputf);
   fscanf(inputf, "%s %s %i", type, varname, &MULTISTAR); fgets(buffer, 1000, inputf); 
 
+  if (MULTISTAR) {
+    printf("WARNING!\n");
+    printf("Multiple-stars are disabled in this version of the code\n");
+  }
   if (MULTISTAR) PPERPLAN = 11;
   else PPERPLAN = 8; 
   printf("pperplan=%i\n", PPERPLAN);
@@ -3816,7 +2080,15 @@ int getinput(char fname[]) {
   fgets(buffer, 1000, inputf);
   fgets(buffer, 1000, inputf);
   fscanf(inputf, "%s %s %i %i %i", type, varname, &RVJITTERFLAG, &NSTARSRV, &NTELESCOPES); fgets(buffer, 1000, inputf);
-  printf("rvjit %i %i %i\n", RVJITTERFLAG, NSTARSRV, NTELESCOPES);
+  printf("rvjitterflag, NstarsRV, Ntelescopes =  %i, %i, %i\n", RVJITTERFLAG, NSTARSRV, NTELESCOPES);
+  if (RVJITTERFLAG && NSTARSRV > 1) {
+    printf("Error: Multiple-stars are disabled in this version of the code, but you set NSTARSRV=%i\n", NSTARSRV);
+    exit(0);
+  }
+  if (RVJITTERFLAG && (NSTARSRV < 0 || NTELESCOPES < 1)) {
+    printf("Error, invalid RV jitter parameter.\n");
+    exit(0);
+  }
   if (RVJITTERFLAG) {
     RVJITTERTOT = NSTARSRV*NTELESCOPES;
     PSTAR += RVJITTERTOT;//*2
@@ -3831,10 +2103,27 @@ int getinput(char fname[]) {
     TTVJITTERTOT = NSTARSTTV*NTELESCOPESTTV;
     PSTAR += TTVJITTERTOT;//*2
   }
+  if (TTVJITTERFLAG && NSTARSTTV > 1) {
+    printf("TTVjitterflag, NstarsTTV, Ntelescopes =  %i, %i, %i\n", TTVJITTERFLAG, NSTARSTTV, NTELESCOPESTTV);
+    printf("Error: Multiple-stars are disabled in this version of the code, but you set NSTARSTTV=%i\n", NSTARSTTV);
+    exit(0);
+  }
+  if (TTVJITTERFLAG && (NSTARSTTV < 0 || NTELESCOPESTTV < 1)) {
+    printf("TTVjitterflag, NstarsTTV, Ntelescopes =  %i, %i, %i\n", TTVJITTERFLAG, NSTARSTTV, NTELESCOPESTTV);
+    printf("Error, invalid value for TTV jitter parameters.\n");
+    exit(0);
+  }
 
   fgets(buffer, 1000, inputf);
   fgets(buffer, 1000, inputf);
   fscanf(inputf, "%s %s %i", type, varname, &CELERITE); fgets(buffer, 1000, inputf);
+#if (celerite_compile == 0)
+  if (CELERITE) {
+    printf("Error: Celerite is set to True, but the code was compiled without celerite functionality\n");
+    printf("Either recompile with celerite, or turn off celerite in the .in file.\n");
+    exit(0);
+  }
+#endif
   if (CELERITE) {
     PSTAR += NCELERITE;//*2
   }
@@ -3842,6 +2131,13 @@ int getinput(char fname[]) {
   fgets(buffer, 1000, inputf);
   fgets(buffer, 1000, inputf);
   fscanf(inputf, "%s %s %i", type, varname, &RVCELERITE); fgets(buffer, 1000, inputf);
+#if (celerite_compile == 0)
+  if (RVCELERITE) {
+    printf("Error: RVCelerite is set to True, but the code was compiled without celerite functionality\n");
+    printf("Either recompile with celerite, or turn off RVcelerite in the .in file.\n");
+    exit(0);
+  }
+#endif
   if (RVCELERITE) {
     PSTAR += NRVCELERITE;//*2
   }
@@ -3858,20 +2154,52 @@ int getinput(char fname[]) {
   MAXDENSITY = malloc(NPL*sofd);
   EMAX = malloc(NPL*sofd); 
   EPRIORV = malloc(NPL*sofd);
+  MASSPRIORCENTERS = malloc(NPL*sofd);
+  MASSPRIORSIGMAS = malloc(NPL*sofd);
 
   const int npl = NPL;
 
   fgets(buffer, 1000, inputf);
   fgets(buffer, 1000, inputf);
   fscanf(inputf, "%s %s %i", type, varname, &SPECTROSCOPY); fgets(buffer, 1000, inputf); 
-  fscanf(inputf, "%lf", &SPECRADIUS); fscanf(inputf, "%lf", &SPECERRPOS); fscanf(inputf, "%lf", &SPECERRNEG); fgets(buffer, 1000, inputf);
-  printf("spectroscopy = %i, %lf, %lf, %lf\n", SPECTROSCOPY, SPECRADIUS, SPECERRPOS, SPECERRNEG);
+  if (SPECTROSCOPY) {
+    fscanf(inputf, "%lf", &SPECRADIUS); fscanf(inputf, "%lf", &SPECERRPOS); fscanf(inputf, "%lf", &SPECERRNEG); fgets(buffer, 1000, inputf);
+    printf("spectroscopy = %i, %lf, %lf, %lf\n", SPECTROSCOPY, SPECRADIUS, SPECERRPOS, SPECERRNEG);
+    if (SPECRADIUS < 0. || SPECERRPOS < 0. || SPECERRNEG < 0.) {
+       printf("Error: all spectroscopy values must be >= 0\n");
+       exit(0);
+    }
+  } else {
+    fgets(buffer, 1000, inputf);
+    printf("radius spectroscopy off\n");
+  }
   fgets(buffer, 1000, inputf);
   fgets(buffer, 1000, inputf);
   fscanf(inputf, "%s %s %i", type, varname, &MASSSPECTROSCOPY); fgets(buffer, 1000, inputf); 
-  fscanf(inputf, "%lf", &SPECMASS); fscanf(inputf, "%lf", &MASSSPECERRPOS); fscanf(inputf, "%lf", &MASSSPECERRNEG); fgets(buffer, 1000, inputf);
-  printf("MASS spectroscopy = %i, %lf, %lf, %lf\n", MASSSPECTROSCOPY, SPECMASS, MASSSPECERRPOS, MASSSPECERRNEG);
-  fgets(buffer, 1000, inputf); //l. 29
+  if (MASSSPECTROSCOPY) {
+    fscanf(inputf, "%lf", &SPECMASS); fscanf(inputf, "%lf", &MASSSPECERRPOS); fscanf(inputf, "%lf", &MASSSPECERRNEG); fgets(buffer, 1000, inputf);
+    printf("MASS spectroscopy = %i, %lf, %lf, %lf\n", MASSSPECTROSCOPY, SPECMASS, MASSSPECERRPOS, MASSSPECERRNEG);
+    if (SPECMASS < 0. || MASSSPECERRPOS < 0. || MASSSPECERRNEG < 0.) {
+       printf("Error: all spectroscopy values must be >= 0\n");
+       exit(0);
+    }
+  } else {
+    fgets(buffer, 1000, inputf);
+    printf("mass spectroscopy off\n");
+  }
+  fgets(buffer, 1000, inputf);
+  fgets(buffer, 1000, inputf);
+  fscanf(inputf, "%s %s %i", type, varname, &LDLAW); fgets(buffer, 1000, inputf); 
+  printf("LDLAW = %i\n", LDLAW);
+  if (LDLAW == 1) {
+    printf("Note: this implementation of the Maxsted+2018 power2 law does not account for mutual transits\n");
+  }
+  if (!(LDLAW == 0 || LDLAW == 1)) {
+    printf("LDLAW = %i\n", LDLAW);
+    printf("Error: ldlaw must be 0 or 1\n");
+    exit(0);
+  }
+  fgets(buffer, 1000, inputf); 
   fscanf(inputf, "%s %s %i", type, varname, &DIGT0); fgets(buffer, 1000, inputf); 
   fgets(buffer, 1000, inputf);
   fscanf(inputf, "%s %s %i", type, varname, &IGT90); fgets(buffer, 1000, inputf); 
@@ -3881,20 +2209,72 @@ int getinput(char fname[]) {
   fscanf(inputf, "%s %s %i", type, varname, &MGT0); fgets(buffer, 1000, inputf); 
   fgets(buffer, 1000, inputf);
   fgets(buffer, 1000, inputf);
-  fscanf(inputf, "%s %s %i", type, varname, &DENSITYCUTON); fgets(buffer, 1000, inputf); 
-  for (i=0; i<npl; i++) fscanf(inputf, "%lf", &MAXDENSITY[i]); fgets(buffer, 1000, inputf); //l.38
+  fscanf(inputf, "%s %s %i", type, varname, &DENSITYCUTON); fgets(buffer, 1000, inputf);
+  if (DENSITYCUTON) { 
+    for (i=0; i<npl; i++) fscanf(inputf, "%lf", &MAXDENSITY[i]); fgets(buffer, 1000, inputf); //l.38
+    for (i=0; i<npl; i++) {
+      if (MAXDENSITY[i] <= 0) {
+        printf("Warning: MAXDENSITY[%i] is <=0, this may cause a crash or hang.\n", i);
+      }
+    }
+  } else {
+    fgets(buffer, 1000, inputf);
+  }
+  fgets(buffer, 1000, inputf);
+  fgets(buffer, 1000, inputf);
+  fgets(buffer, 1000, inputf);
+  fscanf(inputf, "%s %s %i", type, varname, &MASSPRIOR); fgets(buffer, 1000, inputf);
+  if (MASSPRIOR) { 
+    for (i=0; i<npl; i++) fscanf(inputf, "%lf", &MASSPRIORCENTERS[i]); fgets(buffer, 1000, inputf); 
+    for (i=0; i<npl; i++) fscanf(inputf, "%lf", &MASSPRIORSIGMAS[i]); fgets(buffer, 1000, inputf); 
+    for (i=0; i<npl; i++) {
+      printf("Mass ratio prior for planet %i: %lf +/- %lf\n", i+1, MASSPRIORCENTERS[i], MASSPRIORSIGMAS[i]);
+      if (MASSPRIORCENTERS[i] < 0) {
+        printf("Warning: MASSPRIORCENTERS[%i] is <0. This will work as expected but may be unphysical.\n", i);
+      }
+      if (MASSPRIORSIGMAS[i] <= 0) {
+        printf("Error: MASSPRIORSIGMAS[%i] = %lf\n", i, MASSPRIORSIGMAS[i]);
+        printf("       Mass uncertainties must be >= 0.\n");
+        if (MASSPRIORSIGMAS[i] == 0) {
+           printf("To fix a mass, use parfix in the .in file rather than setting MassPriorSigma = 0.\n");
+        }
+        exit(0);
+      }
+    }
+  } else {
+    fgets(buffer, 1000, inputf);
+    fgets(buffer, 1000, inputf);
+  }
+  
   fgets(buffer, 1000, inputf);
   fscanf(inputf, "%s %s %i", type, varname, &SQRTE); fgets(buffer, 1000, inputf); 
+  //printf("%s\n", buffer);
   fgets(buffer, 1000, inputf);
   fgets(buffer, 1000, inputf);
-  fscanf(inputf, "%s %s %i", type, varname, &ECUTON); fgets(buffer, 1000, inputf); 
-  for (i=0; i<npl; i++) fscanf(inputf, "%lf", &EMAX[i]); fgets(buffer, 1000, inputf);
+  fscanf(inputf, "%s %s %i", type, varname, &ECUTON); fgets(buffer, 1000, inputf);
+  if (ECUTON) {  
+    for (i=0; i<npl; i++) fscanf(inputf, "%lf", &EMAX[i]); fgets(buffer, 1000, inputf);
+    for (i=0; i<npl; i++) {
+      if (EMAX[i] <= 0) {
+        printf("Warning: EMAX[%i] is <=0, this may cause a crash or hang.\n", i);
+      }
+    }
+  } else {
+    fgets(buffer, 1000, inputf); 
+  }
   fgets(buffer, 1000, inputf); //l.45
   fgets(buffer, 1000, inputf); //l.45
-  fscanf(inputf, "%s %s %i", type, varname, &EPRIOR); fgets(buffer, 1000, inputf); 
-  for (i=0; i<npl; i++) fscanf(inputf, "%i", &EPRIORV[i]); fgets(buffer, 1000, inputf);
+  fscanf(inputf, "%s %s %i", type, varname, &EPRIOR); fgets(buffer, 1000, inputf);
+  if (EPRIOR) { 
+    for (i=0; i<npl; i++) fscanf(inputf, "%i", &EPRIORV[i]); fgets(buffer, 1000, inputf);
+  } else {
+    fgets(buffer, 1000, inputf);
+  }
   fgets(buffer, 1000, inputf);
-  fscanf(inputf, "%s %s %lf", type, varname, &ESIGMA); fgets(buffer, 1000, inputf); 
+  fscanf(inputf, "%s %s %lf", type, varname, &ESIGMA); fgets(buffer, 1000, inputf);
+  if (ESIGMA <= 0) {
+     printf("Warning ESIGMA <= 0, this may cause a crash or hang.\n");
+  } 
   fgets(buffer, 1000, inputf);
   fscanf(inputf, "%s %s %i", type, varname, &NTEMPS); fgets(buffer, 1000, inputf); 
   printf("sqrte, ecuton, eprior[0], esigma = %i, %i, %i, %lf\n", SQRTE, ECUTON, EPRIORV[0], ESIGMA);
@@ -3904,10 +2284,35 @@ int getinput(char fname[]) {
   }
 
   for (i=0; i<9; i++) fgets(buffer, 1000, inputf);
+  int nfixed = 0;
   for (i=0; i<npl; i++) {
-    for (j=0; j<PPERPLAN; j++) fscanf(inputf, "%i", &PARFIX[PPERPLAN*i+j]); fgets(buffer, 1000, inputf);
+    for (j=0; j<PPERPLAN; j++) {
+      fscanf(inputf, "%i", &PARFIX[PPERPLAN*i+j]);
+      if (PARFIX[PPERPLAN*i+j] == 1) {
+        nfixed++;
+      } else {
+        if (PARFIX[PPERPLAN*i+j] != 0) {
+          printf("Error: All parfix values must be 0 or 1\n");
+          printf("A value of %i was read in.\n", PARFIX[PPERPLAN*i+j]);
+          exit(0);
+        }
+      } 
+    }
+    fgets(buffer, 1000, inputf);
   }
-  for (i=0; i<PSTAR; i++) fscanf(inputf, "%i", &PARFIX[NPL*PPERPLAN+i]); fgets(buffer, 1000, inputf); 
+  for (i=0; i<PSTAR; i++) {
+    fscanf(inputf, "%i", &PARFIX[NPL*PPERPLAN+i]);
+    if (PARFIX[NPL*PPERPLAN+i] == 1) {
+      nfixed++;
+    } else {
+      if (PARFIX[NPL*PPERPLAN+i] != 0) {
+        printf("Error: All parfix values must be 0 or 1\n");
+        printf("A value of %i was read in.\n", PARFIX[NPL*PPERPLAN+i]);
+        exit(0);
+      }
+    } 
+  } 
+  fgets(buffer, 1000, inputf); 
   fgets(buffer, 1000, inputf);
   fscanf(inputf, "%s %s %i", type, varname, &SPLITINCO); fgets(buffer, 1000, inputf); 
   fgets(buffer, 1000, inputf);
@@ -3930,6 +2335,20 @@ int getinput(char fname[]) {
   fscanf(inputf, "%s %s %lf", type, varname, &T1); fgets(buffer, 1000, inputf); 
   fgets(buffer, 1000, inputf);
   printf("t1 = %lf\n", T1);
+  if (T1 <= T0 || EPOCH < T0 || EPOCH > T1) {
+    printf("t0 = %lf, epoch=%lf, t1=%lf\n", T0, EPOCH, T1);
+    printf("Error: You must have t0 <= epoch <= t1 and t0 < t1.\n");
+    exit(0);
+  } 
+
+  fscanf(inputf, "%s %s %lu", type, varname, &OUTPUTINTERVAL); fgets(buffer, 1000, inputf); 
+  fgets(buffer, 1000, inputf);
+  if (OUTPUTINTERVAL <= 0) {
+    printf("Outputinterval must be a positive integer\n");
+    printf("The current value is: %li\n", OUTPUTINTERVAL);
+    printf("If that is not the value you specified, make sure your .in file is formatted correctly.\n");
+    exit(0);
+  }
   fscanf(inputf, "%s %s %lu", type, varname, &SEED); fgets(buffer, 1000, inputf); 
   fgets(buffer, 1000, inputf);
   fscanf(inputf, "%s %s %lf", type, varname, &DISPERSE); fgets(buffer, 1000, inputf); 
@@ -3938,9 +2357,19 @@ int getinput(char fname[]) {
   fgets(buffer, 1000, inputf);
   fscanf(inputf, "%s %s %lf", type, varname, &RELAX); fgets(buffer, 1000, inputf); 
   fgets(buffer, 1000, inputf);
-  fscanf(inputf, "%s %s %i", type, varname, &NPERBIN); fgets(buffer, 1000, inputf); 
+  fscanf(inputf, "%s %s %i", type, varname, &NPERBIN); fgets(buffer, 1000, inputf);
+  if (CADENCESWITCH > 0 && NPERBIN <= 0) {
+    printf("NPERBIN = %i\n", NPERBIN);
+    printf("Error: Nperbin must be >= 1\n");
+    exit(0);
+  } 
   fgets(buffer, 1000, inputf);
   fscanf(inputf, "%s %s %lf", type, varname, &BINWIDTH); fgets(buffer, 1000, inputf); 
+  if (CADENCESWITCH > 0 && BINWIDTH <= 0) {
+    printf("BINWIDTH = %lf\n", BINWIDTH);
+    printf("Error: binwidth must be > 0\n");
+    exit(0);
+  } 
   fgets(buffer, 1000, inputf);
   fscanf(inputf, "%s %s %i", type, varname, &LTE); fgets(buffer, 1000, inputf); 
   fgets(buffer, 1000, inputf);
@@ -3949,7 +2378,19 @@ int getinput(char fname[]) {
   fscanf(inputf, "%s %s %lf", type, varname, &OFFSETMINOUT); fgets(buffer, 1000, inputf); 
   fscanf(inputf, "%s %s %lf", type, varname, &DIST2DIVISOR); fgets(buffer, 1000, inputf);
   fgets(buffer, 1000, inputf);
+  fscanf(inputf, "%s %s %lf", type, varname, &PRINTEPOCH); fgets(buffer, 1000, inputf);
+  if (PRINTEPOCH > T1 || PRINTEPOCH < EPOCH) { 
+    printf("Warning: We must have: epoch <= printepoch <= t1\n");
+    printf("         printepoch was outside this range so printepoch was set to epoch (this should not be a problem in most cases)\n"); 
+    PRINTEPOCH = EPOCH;
+  }
+  fgets(buffer, 1000, inputf);
   fscanf(inputf, "%s %s %i", type, varname, &XYZFLAG); fgets(buffer, 1000, inputf);
+  if (XYZFLAG < 0 || XYZFLAG > 6) {
+    printf("XYZFLAG = %i\n", XYZFLAG);
+    printf("Error: XYZFLAG must be in {0, 1, 2, 3, 4, 5, 6}\n");
+    exit(0);
+  }
   fgets(buffer, 1000, inputf);
   if (XYZFLAG==1 || XYZFLAG==2 || XYZFLAG==3) {
     XYZLIST=malloc(npl*sofi);
@@ -3957,7 +2398,7 @@ int getinput(char fname[]) {
     for (j=0; j<npl; j++) fscanf(inputf, "%i", &XYZLIST[j]);
     fgets(buffer, 1000, inputf);
   } else {
-    XYZLIST=calloc(npl, sofi);
+    XYZLIST = calloc(npl, sofi);
     fgets(buffer, 1000, inputf);
   }
   fgets(buffer, 1000, inputf);
@@ -3967,8 +2408,8 @@ int getinput(char fname[]) {
   fgets(buffer, 1000, inputf);
   fscanf(inputf, "%s %s", type, varname); for (i=0; i<PSTAR; i++) fscanf(inputf, "%lf", &SSTEP[i]); fgets(buffer, 1000, inputf); 
   fgets(buffer, 1000, inputf);
-  fscanf(inputf, "%s %s %i", type, varname, &STEPFLAG); fgets(buffer, 1000, inputf); 
 
+  fscanf(inputf, "%s %s %i", type, varname, &STEPFLAG); fgets(buffer, 1000, inputf); 
   if (STEPFLAG) {
     for (i=0; i<9; i++) fgets(buffer, 1000, inputf);
     for (i=0; i<npl; i++) {
@@ -3982,9 +2423,27 @@ int getinput(char fname[]) {
     for (i=0; i<npl; i++) memcpy(&STEP[i*PPERPLAN], &PSTEP[0], PPERPLAN*sofd);
     memcpy(&STEP[NPL*PPERPLAN], &SSTEP[0], PSTAR*sofd);
   }
+  
+  for (j=0; j<PPERPLAN*NPL+PSTAR; j++) {
+    if (STEP[j] <= 0. && PARFIX[j] != 1) {
+      printf("Warning: STEP[%i] = %lf \n", j, STEP[j]);
+      printf("Setting STEP <= 0 may cause the code to crash or hang if PARFIX != 1\n");
+    }
+  }
 
   PPERWALKER = NPL*PPERPLAN + PSTAR;
+<<<<<<< HEAD:phodymm.cpp
 
+=======
+  int nfree = PPERWALKER-nfixed;
+#if (demcmc_compile == 1)
+  if (NWALKERS <= nfree) {
+    printf("Warning: N_walkers = %i, N_free = %i\n", NWALKERS, nfree); 
+    printf("         N_Walkers should be > N free parameters.\n"); 
+    printf("         The DEMCMC algorithm may fail to perform correctly.\n");
+  } 
+#endif
+>>>>>>> nomulti:phodymm.cpp
   fclose(inputf);
   return 0;
 }
@@ -4236,20 +2695,26 @@ double ***dsetup2 (double *p, const int npl){
   double brightstar=0;
   double bsum=0;
   int i;
-  if (MULTISTAR) {
-    for (i=0; i<npl; i++) bsum+=p[i*pperplan+8];
-    brightstar=1.0-bsum;
-    if (brightstar <= 0.) {
-      printf("Central star has zero or negative brightness. Input must be incorrect (ds2)\n");
-      exit(0);
-    }
-  }
 
   double ms = p[npl*pperplan+0];
   double rstar = p[npl*pperplan+1];
   double c1 = p[npl*pperplan+2];
   double c2 = p[npl*pperplan+3];
   double dilute = p[npl*pperplan+4];
+#if (demcmc_compile == 0)
+  if (ms <= 0.) {
+    printf("Warning: Mstar <= 0\n", i);
+    printf("This may cause a crash or hang.\n");
+  }
+  if (rstar <= 0.) {
+    printf("Warning: Rstar <= 0\n", i);
+    printf("This may cause a crash or hang.\n");
+  }
+  if (dilute < 0. || dilute > 1.) {
+    printf("Warning: dilute value is not 0<=dilute<=1\n", i);
+    printf("This may cause a crash or hang.\n");
+  }
+#endif
 
   double bigg = 1.0e0; //Newton's constant
   double ghere = G; //2.9591220363e-4; 
@@ -4277,7 +2742,17 @@ double ***dsetup2 (double *p, const int npl){
     inc[i] = p[i*pperplan+4]*M_PI/180;
     bo[i] = p[i*pperplan+5]*M_PI/180;
     lo[i] = atan2(p[i*pperplan+3],p[i*pperplan+2]);
-    mp[i]= p[i*pperplan+6];
+    mp[i] = p[i*pperplan+6];
+
+#if (demcmc_compile == 0)
+    if (mp[i] < 0.) {
+      printf("Warning: mass[%i] < 0\n", i);
+    }
+    if (e[i] > 1.) {
+      printf("Warning: e[%i] > 1\n", i);
+      printf("This may cause a crash or hang.\n");
+    }
+#endif
  
     mpjup[i] = mp[i]*jos;       //          ; M_Jup
     msys[i+1] = msys[i]+mpjup[i];
@@ -4323,11 +2798,7 @@ double ***dsetup2 (double *p, const int npl){
     strcat(outfile2str, ".pldin");
     FILE *outfile2 = fopen(outfile2str, "a");
     fprintf(outfile2, "planet                 x                        y                      z                      v_x                   v_y                   v_z                       m                      rpors             ");
-    if (MULTISTAR) {
-      fprintf(outfile2, "brightness               c1                    c2\n");
-    } else {
-      fprintf(outfile2, "\n");
-    }
+    fprintf(outfile2, "\n");
     double pnum = 0.1;
     for (i=0; i<NPL; i++) {
       fprintf(outfile2, "%1.1lf", pnum);
@@ -4337,12 +2808,6 @@ double ***dsetup2 (double *p, const int npl){
       }
       fprintf(outfile2, "\t%.15lf", mpjup[i]/jos);
       fprintf(outfile2, "\t%.15lf", p[i*pperplan+7]);
-      if (MULTISTAR) {
-        for (j=8; j<11; j++) {
-          fprintf(outfile2, "\t%.15lf", p[i*pperplan+j]);
-        }
-      }
-
       fprintf(outfile2, "\n");
       pnum+=0.1;
     }
@@ -4444,11 +2909,7 @@ double ***dsetup2 (double *p, const int npl){
     strcat(outfile2str, ".pldin");
     FILE *outfile2 = fopen(outfile2str, "a");
     fprintf(outfile2, "planet                 x                        y                      z                      v_x                   v_y                   v_z                       m                      rpors             ");
-    if (MULTISTAR) {
-      fprintf(outfile2, "brightness               c1                    c2\n");
-    } else {
-      fprintf(outfile2, "\n");
-    }
+    fprintf(outfile2, "\n");
     double pnum = 0.1;
     for (i=0; i<NPL; i++) {
       fprintf(outfile2, "%1.1lf", pnum);
@@ -4458,12 +2919,6 @@ double ***dsetup2 (double *p, const int npl){
       }
       fprintf(outfile2, "\t%.15lf", mpjup[i]/jos);
       fprintf(outfile2, "\t%.15lf", p[i*pperplan+7]);
-      if (MULTISTAR) {
-        for (j=8; j<11; j++) {
-          fprintf(outfile2, "\t%.15lf", p[i*pperplan+j]);
-        }
-      }
-
       fprintf(outfile2, "\n");
       pnum+=0.1;
     }
@@ -4499,11 +2954,7 @@ double ***dsetup2 (double *p, const int npl){
     strcat(outfile2str, ".pldin");
     FILE *outfile2 = fopen(outfile2str, "a");
     fprintf(outfile2, "planet                 x                        y                      z                      v_x                   v_y                   v_z                       m                      rpors             ");
-    if (MULTISTAR) {
-      fprintf(outfile2, "brightness               c1                    c2\n");
-    } else {
-      fprintf(outfile2, "\n");
-    }
+    fprintf(outfile2, "\n");
     double pnum = 0.0;
 
     fprintf(outfile2, "%1.1lf", pnum);
@@ -4525,12 +2976,6 @@ double ***dsetup2 (double *p, const int npl){
       }
       fprintf(outfile2, "\t%.15lf", mpjup[i]/jos);
       fprintf(outfile2, "\t%.15lf", p[i*pperplan+7]);
-      if (MULTISTAR) {
-        for (j=8; j<11; j++) {
-          fprintf(outfile2, "\t%.15lf", p[i*pperplan+j]);
-        }
-      }
-
       fprintf(outfile2, "\n");
       pnum+=0.1;
     }
@@ -4565,11 +3010,6 @@ double ***dsetup2 (double *p, const int npl){
   integration_in[2][0][5] = 0.;
   integration_in[2][0][6] = 0.;
   integration_in[2][0][7] = 1.;
-  if (MULTISTAR) {
-    integration_in[2][0][8] = brightstar;
-    integration_in[2][0][9] = c1;
-    integration_in[2][0][10] = c2;
-  }
   for (i=0; i<npl; i++) {
     integration_in[2][i+1][0] = bigg*mpjup[i];
     int j;
@@ -4577,26 +3017,13 @@ double ***dsetup2 (double *p, const int npl){
       integration_in[2][i+1][j+1] = statenew[i][j];
     }
     integration_in[2][i+1][7] = p[i*pperplan+7]; 
-    if (MULTISTAR) {
-      for (j=8; j<11; j++) {
-        integration_in[2][i+1][j] = p[i*pperplan+j];
-      }
-    }
   }
   integration_in[3] = malloc(sofds);
-  if (!MULTISTAR) {
-    integration_in[3][0] = malloc(4*sofd);
-  } else {
-    integration_in[3][0] = malloc(2*sofd);
-  }
+  integration_in[3][0] = malloc(4*sofd);
   integration_in[3][0][0] = rstar;
-  if (!MULTISTAR) {
-    integration_in[3][0][1] = c1;
-    integration_in[3][0][2] = c2;
-    integration_in[3][0][3] = dilute;
-  } else {
-    integration_in[3][0][1] = dilute;
-  }
+  integration_in[3][0][1] = c1;
+  integration_in[3][0][2] = c2;
+  integration_in[3][0][3] = dilute;
 
 
 
@@ -4634,9 +3061,9 @@ double *devoerr (double **tmte) {
 
 
 
-//// These routines are from Pal 2008
-// from icirc.c
-//
+////// These routines are from Pal 2008
+//// from icirc.c
+////
 typedef struct
 {	double	x0,y0;
 	double	r;
@@ -5193,30 +3620,131 @@ double mttr_flux_general(circle *circles,int ncircle,double c0,double c1,double 
 }
 
 
+//// These routines are from Maxsted 2018
+
+double clip(double a, double b, double c)
+{
+        if (a < b) 
+                return b;
+        else if (a > c) 
+                return c;
+        else 
+                return a;
+}
+
+double q1(double z, double p, double c, double a, double g, double I_0)
+{
+        double zt = clip(z, 0,1-p);
+        double s = 1-zt*zt;
+        double c0 = (1-c+c*pow(s,g));
+        double c2 = 0.5*a*c*pow(s,(g-2))*((a-1)*zt*zt-1);
+        return 1-I_0*M_PI*p*p*(c0 + 0.25*p*p*c2 - 0.125*a*c*p*p*pow(s,(g-1)));
+}
+
+double q2(double z, double p, double c, double a, double g, double I_0, double eps)
+{
+        double zt = clip(z, 1-p,1+p);
+        double d = clip((zt*zt - p*p + 1)/(2*zt),0,1);
+        double ra = 0.5*(zt-p+d);
+        double rb = 0.5*(1+d);
+        double sa = clip(1-ra*ra,eps,1);
+        double sb = clip(1-rb*rb,eps,1);
+        double q = clip((zt-d)/p,-1,1);
+        double w2 = p*p-(d-zt)*(d-zt);
+        double w = sqrt(clip(w2,eps,1));
+        double c0 = 1 - c + c*pow(sa,g);
+        double c1 = -a*c*ra*pow(sa,(g-1));
+        double c2 = 0.5*a*c*pow(sa,(g-2))*((a-1)*ra*ra-1);
+        double a0 = c0 + c1*(zt-ra) + c2*(zt-ra)*(zt-ra);
+        double a1 = c1+2*c2*(zt-ra);
+        double aq = acos(q);
+        double J1 =  (a0*(d-zt)-(2./3.)*a1*w2 + 0.25*c2*(d-zt)*(2.0*(d-zt)*(d-zt)-p*p))*w + (a0*p*p + 0.25*c2*pow(p,4))*aq ;
+        double J2 = a*c*pow(sa,(g-1))*pow(p,4)*(0.125*aq + (1./12.)*q*(q*q-2.5)*sqrt(clip(1-q*q,0.0,1.0)) );
+        double d0 = 1 - c + c*pow(sb,g);
+        double d1 = -a*c*rb*pow(sb,(g-1));
+        double K1 = (d0-rb*d1)*acos(d) + ((rb*d+(2./3.)*(1-d*d))*d1 - d*d0)*sqrt(clip(1-d*d,0.0,1.0));
+        double K2 = (1/3)*c*a*pow(sb,(g+0.5))*(1-d);
+        return 1 - I_0*(J1 - J2 + K1 - K2);
+}
+
+double Flux_drop_analytical_power_2(double d_radius, double k, double c, double a, double f, double eps)
+{
+        /*
+        Calculate the analytical flux drop por the power-2 law.
+        
+        Parameters
+        d_radius : double
+                Projected seperation of centers in units of stellar radii.
+        k : double
+                Ratio of the radii.
+        c : double
+                The first power-2 coefficient.
+        a : double
+                The second power-2 coefficient.
+        f : double
+                The flux from which to drop light from.
+        eps : double
+                Factor (1e-9)
+        */
+        double I_0 = (a+2)/(M_PI*(a-c*a+2));
+        double g = 0.5*a;
+
+        //else if (abs(d_radius-1) < k) return q2(d_radius, k, c, a, g, I_0, 1e-9);
+        if (d_radius < 1-k) return q1(d_radius, k, c, a, g, I_0);
+        if (fabs(d_radius-1) < k) return q2(d_radius, k, c, a, g, I_0, 1e-9);
+        else return 1.0;
+}
+
+
+
+
 // Lightcurve output functions
 //
 // This function computes the lightcurve for a single time given the positions of the planets and properties of the star
-double onetlc (int nplanets, double **rxy, double rstar, double c1, double c2) {
-
+double onetlc (int nplanets, circle* system, double rstar, double c1, double c2) {
+        
     if (nplanets==0) return 1.0;
-
-    circle sun = {0.,0., rstar/rstar};
-    circle system[nplanets+1];
-    system[0] = sun;
-    int i;
-    for (i=0; i<nplanets; i++) {
-      system[i+1].x0 = rxy[i][1]/rstar;
-      system[i+1].y0 = rxy[i][2]/rstar;
-      system[i+1].r = rxy[i][0]/rstar;///rstar;
-   }
-
-    double c0 = 1.0;
-    double g0, g1, g2;
-    g0 = c0-c1-2.0*c2;
-    g1 = c1+2.0*c2;
-    g2 = c2;
  
-    double flux = mttr_flux_general(system, nplanets+1, g0, g1, g2);// /nflux; 
+    double flux;
+
+    // Pal+2011 mutual event law
+    if (LDLAW == 0) {
+    
+        double c0 = 1.0;
+        double g0, g1, g2;
+        g0 = c0-c1-2.0*c2;
+        g1 = c1+2.0*c2;
+        g2 = c2;
+    
+        flux = mttr_flux_general(system, nplanets+1, g0, g1, g2);// /nflux; 
+
+    // Maxsted+2018 power2 law
+    } else if (LDLAW == 1) {
+
+        double runningflux = 1.0;
+        int i;
+        for (i=0; i<nplanets; i++) {
+            //double d_radius = sqrt(pow(rxy[i][1]/rstar, 2) + pow(rxy[i][2]/rstar, 2));
+            double d_radius = sqrt(pow(system[i+1].x0, 2) + pow(system[i+1].y0, 2));
+            double k = system[i+1].r;
+            double c = c1;
+            double a = c2;
+            double eps = 1e-9;
+            double f = 1.0; // This doesn't seem to do anything in their code
+
+            double thisplanetflux = Flux_drop_analytical_power_2(d_radius, k, c, a, f, eps);
+            double thisdrop = 1.0 - thisplanetflux;
+            runningflux -= thisdrop;
+        } 
+
+        flux = runningflux;
+
+    } else {
+        printf("Error: Currently the only LDLAW options are 1 or 2\n");
+        printf("       Please select one of these\n");
+        exit(0);
+    } 
+     
 
     return flux;
 
@@ -5255,11 +3783,6 @@ double *timedlc ( double *times, int *cadences, long ntimes, double **transitarr
         system[i+1].r = transitarr[i][5];
     }
 
-    double c0 = 1.0;
-    double g0, g1, g2;
-    g0 = c0-c1-2.0*c2;
-    g1 = c1+2.0*c2;
-    g2 = c2;
  
     double flux;   
     double t_cur;
@@ -5274,7 +3797,7 @@ double *timedlc ( double *times, int *cadences, long ntimes, double **transitarr
         jj=j+1;
         while (cadences[j]==0) jj++;
         t_next = times[n+1];
-        flux = mttr_flux_general(system, nplanets+1, g0, g1, g2);// /nflux; 
+        flux = onetlc (nplanets, system, rstarau, c1, c2);
         fluxlist[n] = flux;
         for (i=0; i<nplanets; i++) {
             system[i+1].x0 += transitarr[i][3]*(t_next-t_cur)/(rstarau);
@@ -5282,21 +3805,21 @@ double *timedlc ( double *times, int *cadences, long ntimes, double **transitarr
         }
         j=jj;
       }
-      fluxlist[ntimes-1] = mttr_flux_general(system, nplanets+1, g0, g1, g2);
+      fluxlist[ntimes-1] = onetlc (nplanets, system, rstarau, c1, c2);
 
 
     } else {
       for (n=0; n<ntimes-1; n++) {
         t_cur = times[n];
         t_next = times[n+1];
-        flux = mttr_flux_general(system, nplanets+1, g0, g1, g2);// /nflux; 
+        flux = onetlc (nplanets, system, rstarau, c1, c2);
         fluxlist[n] = flux;
         for (i=0; i<nplanets; i++) {
             system[i+1].x0 += transitarr[i][3]*(t_next-t_cur)/(rstarau);
             system[i+1].y0 += transitarr[i][4]*(t_next-t_cur)/(rstarau);
         }
       }
-      fluxlist[ntimes-1] = mttr_flux_general(system, nplanets+1, g0, g1, g2);
+      fluxlist[ntimes-1] = onetlc(nplanets, system, rstarau, c1, c2);
     }
 
     return fluxlist;
@@ -5361,11 +3884,6 @@ double *binnedlc ( double *times, int *cadences, long ntimes, double binwidth, i
         system[i+1].r = transitarr[i][5];
     }
 
-    double c0 = 1.0;
-    double g0, g1, g2;
-    g0 = c0-c1-2.0*c2;
-    g1 = c1+2.0*c2;
-    g2 = c2;
  
     double flux;   
     long n=0;
@@ -5376,28 +3894,46 @@ double *binnedlc ( double *times, int *cadences, long ntimes, double binwidth, i
         double binnedflux=0;
         if (cadences[n] == 1) {
           for (nn=0; nn<nperbin; nn++) {
+<<<<<<< HEAD:phodymm.cpp
             binnedflux += mttr_flux_general(system, nplanets+1, g0, g1, g2);// /nflux; 
             if (nn < (nperbin-1)) {
+=======
+            binnedflux += onetlc (nplanets, system, rstarau, c1, c2);
+            //if (nn < (nperbin-1)) {
+>>>>>>> nomulti:phodymm.cpp
               double t_cur = fulltimelist[(n-nlong) + nlong*nperbin + nn];
               double t_next = fulltimelist[(n-nlong) + nlong*nperbin + nn + 1];
               for (i=0; i<nplanets; i++) {
                 system[i+1].x0 += transitarr[i][3]*(t_next-t_cur)/rstarau;
                 system[i+1].y0 += transitarr[i][4]*(t_next-t_cur)/rstarau;
               }
+<<<<<<< HEAD:phodymm.cpp
             }
+=======
+            //}
+>>>>>>> nomulti:phodymm.cpp
           }
           binnedflux = binnedflux/nperbin;
           nlong++;
         } else {
+<<<<<<< HEAD:phodymm.cpp
           binnedflux += mttr_flux_general(system, nplanets+1, g0, g1, g2);// /nflux; 
           if (nn < (nperbin-1)) {
+=======
+          binnedflux += onetlc (nplanets, system, rstarau, c1, c2);
+          //if (nn < (nperbin-1)) {
+>>>>>>> nomulti:phodymm.cpp
             double t_cur = fulltimelist[(n-nlong) + nlong*nperbin];
             double t_next = fulltimelist[(n-nlong) + nlong*nperbin + 1];
             for (i=0; i<nplanets; i++) {
               system[i+1].x0 += transitarr[i][3]*(t_next-t_cur)/rstarau;
               system[i+1].y0 += transitarr[i][4]*(t_next-t_cur)/rstarau;
             }
+<<<<<<< HEAD:phodymm.cpp
           }
+=======
+          //}
+>>>>>>> nomulti:phodymm.cpp
         }
         fluxlist[n] = binnedflux;
       }
@@ -5406,15 +3942,24 @@ double *binnedlc ( double *times, int *cadences, long ntimes, double binwidth, i
         int nn;
         double binnedflux=0;
         for (nn=0; nn<nperbin; nn++) {
+<<<<<<< HEAD:phodymm.cpp
           binnedflux += mttr_flux_general(system, nplanets+1, g0, g1, g2);// /nflux; 
           if (nn < (nperbin-1)) {
+=======
+          binnedflux += onetlc (nplanets, system, rstarau, c1, c2);
+          //if (nn < (nperbin-1)) {
+>>>>>>> nomulti:phodymm.cpp
             double t_cur = fulltimelist[n*nperbin+nn];
             double t_next = fulltimelist[n*nperbin+nn+1];
             for (i=0; i<nplanets; i++) {
               system[i+1].x0 += transitarr[i][3]*(t_next-t_cur)/rstarau;
               system[i+1].y0 += transitarr[i][4]*(t_next-t_cur)/rstarau;
             }
+<<<<<<< HEAD:phodymm.cpp
           }
+=======
+          //}
+>>>>>>> nomulti:phodymm.cpp
         }
         binnedflux = binnedflux/nperbin;
         fluxlist[n] = binnedflux;
@@ -5422,6 +3967,7 @@ double *binnedlc ( double *times, int *cadences, long ntimes, double binwidth, i
     }
 
     free(fulltimelist);
+//exit(0); 
     return fluxlist;
 
 }
@@ -5542,11 +4088,6 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
     double *c2bin1;
     double *celeriteps = malloc(4*sofd);
     double *rvceleriteps = malloc(4*sofd);
-    if (MULTISTAR) {
-      brightness1 = malloc(npl*sofd);
-      c1bin1 = malloc(npl*sofd);
-      c2bin1 = malloc(npl*sofd);
-    }
     double ms;
     double c0;
     double c1;
@@ -5600,12 +4141,6 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
       }
       p[i*pperplan+6] = mp1[i];
       p[i*pperplan+7] = rpors1[i];
-      if (MULTISTAR) {
-        fscanf(aeifile, "%lf %lf %lf", &brightness1[i], &c1bin1[i], &c2bin1[i]);
-        p[i*pperplan+8] = brightness1[i];
-        p[i*pperplan+9] = c1bin1[i];
-        p[i*pperplan+10] = c2bin1[i]; 
-      }
       fgets(buffer, 1000, aeifile); // This line usually unnecessarily advances the file pointer to a new line. 
                                     // Unless  you are not multistar and but have too many inputs. It then  saves you from bad read-ins 
     }
@@ -5730,9 +4265,6 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
     fclose(aeifile);
 
     free(planet1); free(period1); free(t01); free (e1); free(inc1); free(bo1); free(lo1); free(mp1); free(rpors1); free(celeriteps); free(rvceleriteps); 
-    if (MULTISTAR) {
-      free(brightness1); free(c1bin1); free(c2bin1);
-    }
     if (RVJITTERFLAG) {
       free(jittersize);
     }
@@ -5862,11 +4394,14 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
         while (fscanf(rvfile, "%lf %lf %lf %i", &rvtimelist[vv+1], &rvlist[vv+1], &rverrlist[vv+1], &rvtelelist[vv+1]) == 4) { 
           rvbodylist[vv+1] = (double) i;
           if (vv>=rvlistlen-1) {
-            timelistlen+=1000;
+            rvlistlen+=1000;
             rvtimelist = realloc(rvtimelist, rvlistlen*sofd);
             rvlist = realloc(rvlist, rvlistlen*sofd);
             rverrlist = realloc(rverrlist, rvlistlen*sofd);
-            if (rverrlist==NULL) {
+            rvbodylist = realloc(rvbodylist, rvlistlen*sofd);
+            rvtelelist = realloc(rvtelelist, rvlistlen*sofi);
+            rvtelelistd = realloc(rvtelelistd, rvlistlen*sofd); 
+            if (rverrlist==NULL || rvtelelistd==NULL) {
               sout = fopen("demcmc.stdout", "a");
               fprintf(sout, "rvlist allocation failure\n");
               fclose(sout);
@@ -5911,7 +4446,6 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
       rvbodylist[z] = bigrvlist[(z-1)*5+3]; 
       rvtelelistd[z] = bigrvlist[(z-1)*5+4];
     }
-    printf("here0.8\n");
 
     tve[0]=rvtimelist;
     tve[1]=rvlist;
@@ -5961,7 +4495,7 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
   int w;
 
   double gamma;
-  double xisqmin; 
+  double neg2loglikemin; 
   double *gammaN;
 
   int fixedpars = 0;
@@ -5989,9 +4523,6 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
         int j; 
         for (j=0; j<npl; j++) {
           fscanf(restartf, " %lf %lf %lf %lf %lf %lf %lf %lf %lf", &ignore, &p0[i][j][0], &p0[i][j][1], &p0[i][j][2], &p0[i][j][3], &p0[i][j][4], &p0[i][j][5], &p0[i][j][6], &p0[i][j][7]);
-          if (MULTISTAR) {
-            fscanf(restartf, "%lf %lf %lf", &p0[i][j][8], &p0[i][j][9], &p0[i][j][10]);
-          }
         }
         fscanf(restartf, "%lf", &p0[i][npl][0]);
         fgets(ignorec, 1000, restartf);
@@ -6059,17 +4590,27 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
       for (i=0; i<11; i++) {
         cgarbage = fgetc(rebsqf);
       }
-      double rexisqmin;
-      fscanf(rebsqf, "%lf", &rexisqmin);
+      double reneg2loglikemin;
+      fscanf(rebsqf, "%lf", &reneg2loglikemin);
       fclose(rebsqf);
-      xisqmin = rexisqmin;
+      neg2loglikemin = reneg2loglikemin;
      
       printf("Read in Restart best chi sq\n");
-      printf("xisqmin=%lf\n", xisqmin);
+      printf("neg2loglikemin=%lf\n", neg2loglikemin);
       printf("gamma=%lf\n", gamma); 
     
   
   } else {  //if not RESTART
+
+    int j;
+    for (j=0; j<npl; j++) {
+      if ( ((IGT90==1) && p[j*pperplan+4] < 90.) || ((IGT90==2) && p[j*pperplan+4] > 90.) ) {
+        printf("Warning: at least one planet has initial inclination that is not allowed\n");
+        printf("         Compare the igt90 flag in the .in file to the planetary i values in the .pldin file\n");
+        printf("         This may cause initialization to hang.\n");
+        break;
+      } 
+    }
 
     printf("Initializing Walkers\n");
     // take small random steps to initialize walkers
@@ -6087,7 +4628,7 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
             //else p0[i][j][k] = p[j][k] + epsilon;
             p0[i][j][k] = p[j*pperplan+k] + epsilon;
             if ( (int) ceil(disperse) ) p0[i][j][k] += disperse*(1-parfix[j*pperplan+k])*step[j*pperplan+k]*gsl_ran_gaussian(r, 1.0);
-          } while ( (IGT90 && (k==4 && p0[i][j][k] < 90.0)) || (MGT0 && (k==6 && p0[i][j][k] < 0.0)) );
+          } while ( ((IGT90==1) && (k==4 && p0[i][j][k] < 90.0)) || ((IGT90==2) && (k==4 && p0[i][j][k] > 90.0)) || (MGT0 && (k==6 && p0[i][j][k] < 0.0)) );
         }
       }
       for (j=0; j<pstar; j++) {
@@ -6129,7 +4670,6 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
   double ***dsetup2 (double *p, const int npl); //prototype 
   double ***dpintegrator_single (double ***int_in, double **tfe, double **tve, double **nte, int *cadencelist); //prototype 
   int dpintegrator_single_megno (double ***int_in); //prototype 
-  double ***dpintegrator_multi (double ***int_in, double **tfe, double **tve, int *cadencelist); //prototype 
   double *devoerr (double **tmte); //prototype
 
 #if (demcmc_compile==0)
@@ -6140,30 +4680,44 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
   printf("int_in %lf, %lf, %lf, %lf\n", int_in[0][0][0], int_in[1][0][0], int_in[2][0][0], int_in[2][1][0]);
 
   double ***flux_rvs; 
+<<<<<<< HEAD:phodymm.cpp
   if (MULTISTAR) {
     flux_rvs = dpintegrator_multi(int_in, tfe, tve, cadencelist);
   } else {
     flux_rvs = dpintegrator_single(int_in, tfe, tve, nte, cadencelist);
   }
+=======
+  flux_rvs = dpintegrator_single(int_in, tfe, tve, nte, cadencelist);
+>>>>>>> nomulti:phodymm.cpp
   printf("Integration Complete\n");
   
   double **ttvts = flux_rvs[2];
   double **flux = flux_rvs[0];
   double **radvs = flux_rvs[1];
   double *dev = devoerr(flux);
+<<<<<<< HEAD:phodymm.cpp
   double xisq = 0;
+=======
+  double neg2loglike = 0;
+>>>>>>> nomulti:phodymm.cpp
   long il;
   long maxil = (long) dev[0];
   printf("kk=%li\n", maxil);
  
   if (! CELERITE) { 
+<<<<<<< HEAD:phodymm.cpp
     for (il=0; il<maxil; il++) xisq += dev[il+1]*dev[il+1];
   } else { // if celerite
     xisq = celerite_fit(flux_rvs, p, 0, 0, 1);
+=======
+    for (il=0; il<maxil; il++) neg2loglike += dev[il+1]*dev[il+1];
+  } else { // if celerite
+    neg2loglike = celerite_fit(flux_rvs, p, 0, 0, 1);
+>>>>>>> nomulti:phodymm.cpp
   }
 
-  printf("xisq=%lf\n", xisq);
-  printf("prervjitter\n");
+  printf("pre rvjitter:\n");
+  printf("neg2loglike=%lf\n", neg2loglike);
 
   if (RVS) {
     if (! RVCELERITE) { 
@@ -6178,17 +4732,21 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
           double sigmajitter = p[npl*pperplan+5+jitterindex]*MPSTOAUPD;
           double quadsum = sigmajitter*sigmajitter + radvs[3][1+kj]*radvs[3][1+kj];
           // double check this... factor of 1/2
-          xisq += log(quadsum / (radvs[3][1+kj]*radvs[3][1+kj]) );
+          neg2loglike += log(quadsum / (radvs[3][1+kj]*radvs[3][1+kj]) );
           newelist[1+kj] = sqrt( quadsum );
         }
         radvs[3] = newelist;
       }
       double *rvdev = devoerr(radvs);
       long maxil = (long) rvdev[0];
-      for (il=0; il<maxil; il++) xisq += rvdev[il+1]*rvdev[il+1];
+      for (il=0; il<maxil; il++) neg2loglike += rvdev[il+1]*rvdev[il+1];
       free(rvdev);
     } else { // if rvcelerite
+<<<<<<< HEAD:phodymm.cpp
       xisq += celerite_fit(flux_rvs, p, 0, 1, 1);
+=======
+      neg2loglike += celerite_fit(flux_rvs, p, 0, 1, 1);
+>>>>>>> nomulti:phodymm.cpp
     }
   }
 
@@ -6204,7 +4762,7 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
         double sigmajitter = p[npl*pperplan+5+RVJITTERTOT+jitterindex];
         double quadsum = sigmajitter*sigmajitter + ttvts[3][1+kj]*ttvts[3][1+kj];
         // check that the index on ttvts should be 2
-        xisq += log(quadsum / (ttvts[3][1+kj]*ttvts[3][1+kj]) );
+        neg2loglike += log(quadsum / (ttvts[3][1+kj]*ttvts[3][1+kj]) );
         newelistttv[1+kj] = sqrt(quadsum);
       }
       ttvts[3] = &newelistttv[0];
@@ -6213,18 +4771,18 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
     double *ttvdev = devoerr(ttvts);
     printf("ttvts\n");
     long maxil = (long) ttvdev[0];
-    for (il=0; il<maxil; il++) xisq += ttvdev[il+1]*ttvdev[il+1];
+    for (il=0; il<maxil; il++) neg2loglike += ttvdev[il+1]*ttvdev[il+1];
     free (ttvdev);
-    printf("4xisq=%lf\n", xisq);
     if (TTVJITTERFLAG) {
       free(newelistttv);
     }
   }
-  printf("postttvjitter\n");
-  printf("xisq=%lf\n", xisq);
+  printf("post ttvjitter:\n");
+  printf("neg2loglike=%lf\n", neg2loglike);
   
 //  double photoradius = int_in[3][0][0]; 
 //  if (SPECTROSCOPY) {
+<<<<<<< HEAD:phodymm.cpp
 //    if (photoradius > SPECRADIUS) xisq += pow( (photoradius - SPECRADIUS) / SPECERRPOS, 2 );
 //    else xisq += pow( (photoradius - SPECRADIUS) / SPECERRNEG, 2 );
 //  }
@@ -6242,6 +4800,25 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
 //    }
 //  }
 //  printf("xisqnoe=%lf\n", xisq);
+=======
+//    if (photoradius > SPECRADIUS) neg2loglike += pow( (photoradius - SPECRADIUS) / SPECERRPOS, 2 );
+//    else neg2loglike += pow( (photoradius - SPECRADIUS) / SPECERRNEG, 2 );
+//  }
+//  double photomass = int_in[2][0][0]; 
+//  if (MASSSPECTROSCOPY) {
+//    if (photomass > SPECMASS) neg2loglike += pow( (photomass - SPECMASS) / MASSSPECERRPOS, 2 );
+//    else neg2loglike += pow( (photomass - SPECMASS) / MASSSPECERRNEG, 2 );
+//  }
+//  printf("neg2loglikenoinc=%lf\n", neg2loglike);
+//  if (INCPRIOR) {
+//    int i0;
+//    for (i0=0; i0<npl; i0++) {
+//      printf("%lf\n", neg2loglike);
+//      neg2loglike += -2.0*log( sin(p[i0*pperplan+4] *M_PI/180.) ); 
+//    }
+//  }
+//  printf("neg2loglikenoe=%lf\n", neg2loglike);
+>>>>>>> nomulti:phodymm.cpp
 //  double* evector = malloc(npl*sofd);
 //  if (ECUTON || EPRIOR) {
 //    if (SQRTE) {
@@ -6266,14 +4843,25 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
 //        } else if (EPRIOR==2) {
 //          priorprob = normalpdf(evector[i0]);
 //        }
+<<<<<<< HEAD:phodymm.cpp
 //        xisq += -2.0*log( priorprob );
+=======
+//        neg2loglike += -2.0*log( priorprob );
+>>>>>>> nomulti:phodymm.cpp
 //      }
 //    }
 //  }
 
+<<<<<<< HEAD:phodymm.cpp
   xisq += compute_priors(p, 0);
 
   printf("xisq=%lf\n", xisq);
+=======
+  neg2loglike += compute_priors(p, 0);
+
+  printf("post priors:\n");
+  printf("neg2loglike=%lf\n", neg2loglike);
+>>>>>>> nomulti:phodymm.cpp
   free(dev);
 
   if (CONVERT) {  
@@ -6311,11 +4899,7 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
     strcat(outfile2str, ".pldin");
     FILE *outfile2 = fopen(outfile2str, "a");
     fprintf(outfile2, "planet         period (d)               T0 (d)                  e                   i (deg)                 Omega (deg)               omega(deg)               mp (mjup)              rpors           ");
-    if (MULTISTAR) {
-      fprintf(outfile2, "brightness               c1                    c2\n");
-    } else {
-      fprintf(outfile2, "\n");
-    }
+    fprintf(outfile2, "\n");
     char ch = 'a';
     double pnum = 0.1;
     int ip;
@@ -6332,11 +4916,6 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
       fprintf(outfile2, "\t%.15lf", orbparam[ip][5]*180.0/M_PI);
       for (ii=6; ii<8; ii++) {
         fprintf(outfile2, "\t%.15lf", p[ip*pperplan+ii]); 
-      }
-      if (MULTISTAR) {
-        for (ii=8; ii<11; ii++) {
-          fprintf(outfile2, "\t%.15lf", p[ip*pperplan+ii]);
-        }
       }
       fprintf(outfile2, "\n");
     }
@@ -6370,18 +4949,14 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
       }
     }
     fprintf(outfile2, " ; Comments: These coordinates are jacobian (see Lee & Peale 2003).\n");
-    fprintf(outfile2, " ; chisq = %.15lf\n", xisq);
+    fprintf(outfile2, " ; neg2loglike = %.15lf\n", neg2loglike);
 
     if (SQRTE) {
       fprintf(outfile2, "planet         period (d)               T0 (d)              sqrt[e] cos(omega)        sqrt[e] sin(omega)        i (deg)                 Omega (deg)            mp (mjup)              rpors           ");
     } else {
       fprintf(outfile2, "planet         period (d)               T0 (d)              e cos(omega)             e sin(omega)             i (deg)                 Omega (deg)            mp (mjup)              rpors           ");
     }
-    if (MULTISTAR) {
-      fprintf(outfile2, "      brightness               c1                    c2\n");
-    } else {
-      fprintf(outfile2, "\n");
-    }
+    fprintf(outfile2, "\n");
     ch = 'a';
     pnum = 0.1;
     for (ip=0; ip<npl; ip++) {
@@ -6403,11 +4978,6 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
       for (ii=6; ii<8; ii++) {
         fprintf(outfile2, "\t%.15lf", p[ip*pperplan+ii]); 
       }
-      if (MULTISTAR) {
-        for (ii=8; ii<11; ii++) {
-          fprintf(outfile2, "\t%.15lf", p[ip*pperplan+ii]);
-        }
-      }
       fprintf(outfile2, "\n");
     }
     fprintf(outfile2, "%.15lf ; Mstar (M_sol)\n", p[npl*pperplan+0]);
@@ -6440,15 +5010,11 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
       }
     }
     fprintf(outfile2, " ; Comments: These coordinates are jacobian (see Lee & Peale 2003).\n");
-    fprintf(outfile2, " ; chisq = %.15lf\n", xisq);
+    fprintf(outfile2, " ; neg2loglike = %.15lf\n", neg2loglike);
 
 
     fprintf(outfile2, "planet         a (AU)                   e                       i (deg)                omega (deg)          Omega (deg)               f (deg)               mp (mjup)              rpors           ");
-    if (MULTISTAR) {
-      fprintf(outfile2, "       brightness               c1                    c2\n");
-    } else {
-      fprintf(outfile2, "\n");
-    }
+    fprintf(outfile2, "\n");
     ch = 'a';
     pnum = 0.1;
     for (ip=0; ip<npl; ip++) {
@@ -6465,11 +5031,6 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
       for (ii=6; ii<8; ii++) {
         fprintf(outfile2, "\t%.15lf", p[ip*pperplan+ii]); 
       }
-      if (MULTISTAR) {
-        for (ii=8; ii<11; ii++) {
-          fprintf(outfile2, "\t%.15lf", p[ip*pperplan+ii]);
-        }
-      }
       fprintf(outfile2, "\n");
     }
     fprintf(outfile2, "%.15lf ; Mstar (M_sol)\n", p[npl*pperplan+0]);
@@ -6502,7 +5063,7 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
       }
     }
     fprintf(outfile2, " ; Comments: These coordinates are jacobian (see Lee & Peale 2003).\n");
-    fprintf(outfile2, " ; chisq = %.15lf\n", xisq);
+    fprintf(outfile2, " ; neg2loglike = %.15lf\n", neg2loglike);
 
     fclose(outfile2);
 
@@ -6535,29 +5096,38 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
   free(flux_rvs);
 
 #elif (demcmc_compile==1)
-  printf("made it3\n");
+  printf("Setup Complete\n");
+  printf("Beginning DEMCMC (this may take a very long time)\n");
   // xi squared array (one value per walker)
-  double *xisq0 = malloc(nwalkers*sofd);
-  double **xisq0N;
+  double *neg2loglike0 = malloc(nwalkers*sofd);
+  double **neg2loglike0N;
 
   for (i=0; i<nwalkers; i++) {
     double ***int_in = dsetup2(&p0local[pperwalker*i], npl);
     //printf("Converted to XYZ\n");
     double ***flux_rvs; 
+<<<<<<< HEAD:phodymm.cpp
     if (MULTISTAR) flux_rvs = dpintegrator_multi(int_in, tfe, tve, cadencelist);
     else flux_rvs = dpintegrator_single(int_in, tfe, tve, nte, cadencelist);
+=======
+    flux_rvs = dpintegrator_single(int_in, tfe, tve, nte, cadencelist);
+>>>>>>> nomulti:phodymm.cpp
     //printf("Computed Flux\n");
     double **ttvts = flux_rvs[2];
     double **flux = flux_rvs[0];
     double **radvs = flux_rvs[1];
     double *dev = devoerr(flux);
-    double xisqtemp = 0;
+    double neg2logliketemp = 0;
     long il;
     long maxil = (long) dev[0];
     if (! CELERITE) { 
-      for (il=0; il<maxil; il++) xisqtemp += dev[il+1]*dev[il+1];
+      for (il=0; il<maxil; il++) neg2logliketemp += dev[il+1]*dev[il+1];
     } else { // if celerite
+<<<<<<< HEAD:phodymm.cpp
       xisqtemp = celerite_fit(flux_rvs, p0local, i, 0, 0); 
+=======
+      neg2logliketemp = celerite_fit(flux_rvs, p0local, i, 0, 0); 
+>>>>>>> nomulti:phodymm.cpp
     }
     double *newelist;
  
@@ -6575,7 +5145,7 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
             double sigmajitter = p0local[pperwalker*i+npl*pperplan+5+jitterindex]*MPSTOAUPD;
             double quadsum = sigmajitter*sigmajitter + radvs[3][1+kj]*radvs[3][1+kj];
             // double check this... factor of 1/2
-            xisqtemp += log(quadsum / (radvs[3][1+kj]*radvs[3][1+kj]) );
+            neg2logliketemp += log(quadsum / (radvs[3][1+kj]*radvs[3][1+kj]) );
             newelist[1+kj] = sqrt( quadsum );
           }
           radvs[3] = newelist;
@@ -6583,12 +5153,16 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
 
         double *rvdev = devoerr(radvs);
         long maxil = (long) rvdev[0];
-        for (il=0; il<maxil; il++) xisqtemp += rvdev[il+1]*rvdev[il+1];
+        for (il=0; il<maxil; il++) neg2logliketemp += rvdev[il+1]*rvdev[il+1];
         free(rvdev);
   
   
       } else { // if rvcelerite
+<<<<<<< HEAD:phodymm.cpp
         xisqtemp += celerite_fit(flux_rvs, p0local, i, 1, 0);
+=======
+        neg2logliketemp += celerite_fit(flux_rvs, p0local, i, 1, 0);
+>>>>>>> nomulti:phodymm.cpp
       } 
     }
 
@@ -6604,25 +5178,29 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
           double sigmajitter = p0local[pperwalker*i+npl*pperplan+5+RVJITTERTOT+jitterindex];
           double quadsum = sigmajitter*sigmajitter + ttvts[3][1+kj]*ttvts[3][1+kj];
           // check that the index on ttvts should be 2
-          xisqtemp += log(quadsum / (ttvts[3][1+kj]*ttvts[3][1+kj]) );
+          neg2logliketemp += log(quadsum / (ttvts[3][1+kj]*ttvts[3][1+kj]) );
           newelistttv[1+kj] = sqrt(quadsum);
         }
         ttvts[3] = newelistttv;
       }
       double *ttvdev = devoerr(ttvts);
       long maxil = (long) ttvdev[0];
-      for (il=0; il<maxil; il++) xisqtemp += ttvdev[il+1]*ttvdev[il+1];
+      for (il=0; il<maxil; il++) neg2logliketemp += ttvdev[il+1]*ttvdev[il+1];
       free (ttvdev);
       if (TTVJITTERFLAG) {
         free(newelistttv);
       }
     }
 
+<<<<<<< HEAD:phodymm.cpp
     xisqtemp += compute_priors(p0local, i); 
+=======
+    neg2logliketemp += compute_priors(p0local, i); 
+>>>>>>> nomulti:phodymm.cpp
 
     celeritefail:
 
-    xisq0[i] = xisqtemp;
+    neg2loglike0[i] = neg2logliketemp;
  
     //free(evector);
 
@@ -6658,8 +5236,8 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
   
 
   if (! RESTART ) {
-    // set lowest xisq
-    xisqmin = HUGE_VAL;
+    // set lowest neg2loglike
+    neg2loglikemin = HUGE_VAL;
   }
 
 
@@ -6672,10 +5250,10 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
 
   int *acceptanceglobal = malloc(nwalkers*sofi);
   double *p0global = malloc(totalparams*sofd);
-  double *xisq0global = malloc(nwalkers*sofd);
+  double *neg2loglike0global = malloc(nwalkers*sofd);
   int **acceptanceglobalN;
   double **p0globalN;
-  double **xisq0globalN;
+  double **neg2loglike0globalN;
 
 
   // loop over generations
@@ -6702,6 +5280,15 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
     int ncores;
     MPI_Comm_size(MPI_COMM_WORLD, &ncores);
     int npercore = nwalkers / ncores;
+    
+    //if ((nwalkers % ncores) > 0) {
+    //  //printf("WARNING: Nwalkers is not an integer multiple of ncores. This will reduce performance.\n");
+    //  //npercore += 1;
+    //  printf("ERROR: Nwalkers modulo Ncores must be 0.\n");
+    //  printf("       Nwalkers=%i, Ncores=%i\n", nwalkers, ncores);
+    //  printf("       At least one of these must be changed.\n");
+    //  exit(0);
+    //}
     //nwcore = (unsigned long) RANK;
     //printf("ncores %i nwalkers %i\n", ncores, nwalkers);
     
@@ -6710,7 +5297,7 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
     long nwfin=(nwcore+1)*npercore;
     // This loops allows you to have more walkers than cores
     for (nw=nwinit; nw < nwfin; nw++) {
-  
+
       memcpy(p0localcopy, &p0local[nw*pperwalker], pperwalker*sofd);
 
       acceptance[nw] = 1;
@@ -6758,19 +5345,22 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
         double ***nint_in = dsetup2(&p0local[nw*pperwalker], npl);
   
         double ***nflux_rvs; 
-        if (MULTISTAR) nflux_rvs = dpintegrator_multi(nint_in, tfe, tve, cadencelist);
-        else nflux_rvs = dpintegrator_single(nint_in, tfe, tve, nte, cadencelist);
+        nflux_rvs = dpintegrator_single(nint_in, tfe, tve, nte, cadencelist);
         double **nttvts = nflux_rvs[2];
         double **nflux = nflux_rvs[0];
         double **nradvs = nflux_rvs[1];
         double *ndev = devoerr(nflux);
-        double nxisqtemp = 0;
+        double nneg2logliketemp = 0;
         long il;
         long maxil = (long) ndev[0];
         if (! CELERITE) { 
-          for (il=0; il<maxil; il++) nxisqtemp += ndev[il+1]*ndev[il+1];
+          for (il=0; il<maxil; il++) nneg2logliketemp += ndev[il+1]*ndev[il+1];
         } else { // if celerite
+<<<<<<< HEAD:phodymm.cpp
           nxisqtemp = celerite_fit(nflux_rvs, p0local, nw, 0, 0);
+=======
+          nneg2logliketemp = celerite_fit(nflux_rvs, p0local, nw, 0, 0);
+>>>>>>> nomulti:phodymm.cpp
         }
         double *newelist;
         if (RVS) {
@@ -6786,7 +5376,7 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
                 double sigmajitter = p0local[pperwalker*nw+npl*pperplan+5+jitterindex]*MPSTOAUPD;
                 double quadsum = sigmajitter*sigmajitter + nradvs[3][1+kj]*nradvs[3][1+kj];
                 // double check this... factor of 1/2
-                nxisqtemp += log(quadsum / (nradvs[3][1+kj]*nradvs[3][1+kj]) );
+                nneg2logliketemp += log(quadsum / (nradvs[3][1+kj]*nradvs[3][1+kj]) );
                 newelist[1+kj] = sqrt( quadsum );
               }
               nradvs[3] = newelist;
@@ -6794,11 +5384,15 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
     
             double *rvdev = devoerr(nradvs);
             long maxil = (long) rvdev[0];
-            for (il=0; il<maxil; il++) nxisqtemp += rvdev[il+1]*rvdev[il+1];
+            for (il=0; il<maxil; il++) nneg2logliketemp += rvdev[il+1]*rvdev[il+1];
             free(rvdev);
   
           } else { // if rvcelerite
+<<<<<<< HEAD:phodymm.cpp
             nxisqtemp += celerite_fit(nflux_rvs, p0local, nw, 1, 0);
+=======
+            nneg2logliketemp += celerite_fit(nflux_rvs, p0local, nw, 1, 0);
+>>>>>>> nomulti:phodymm.cpp
           }
         }
         if (TTVCHISQ) {
@@ -6814,7 +5408,7 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
               double sigmajitter = p0local[pperwalker*nw+npl*pperplan+5+RVJITTERTOT+jitterindex];
               double quadsum = sigmajitter*sigmajitter + nttvts[3][1+kj]*nttvts[3][1+kj];
               // check that the index on ttvts should be 2
-              nxisqtemp += log(quadsum / (nttvts[3][1+kj]*nttvts[3][1+kj]) );
+              nneg2logliketemp += log(quadsum / (nttvts[3][1+kj]*nttvts[3][1+kj]) );
               newelistttv[1+kj] = sqrt(quadsum);
             }
             nttvts[3] = newelistttv;
@@ -6822,7 +5416,7 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
         
           double *ttvdev = devoerr(nttvts);
           long maxil = (long) ttvdev[0];
-          for (il=0; il<maxil; il++) nxisqtemp += ttvdev[il+1]*ttvdev[il+1];
+          for (il=0; il<maxil; il++) nneg2logliketemp += ttvdev[il+1]*ttvdev[il+1];
           free (ttvdev);
           if (TTVJITTERFLAG) {
             free(newelistttv);
@@ -6831,9 +5425,15 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
         }
        
 
+<<<<<<< HEAD:phodymm.cpp
         nxisqtemp += compute_priors(p0local, nw);
  
         double xisq = nxisqtemp;
+=======
+        nneg2logliketemp += compute_priors(p0local, nw);
+ 
+        double neg2loglike = nneg2logliketemp;
+>>>>>>> nomulti:phodymm.cpp
 
         free(nint_in[0][0]);
         free(nint_in[0]);
@@ -6862,7 +5462,7 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
     
         // prob that you should take new state
         double prob;
-        prob = exp((xisq0[nw]-xisq)/2.);
+        prob = exp((neg2loglike0[nw]-neg2loglike)/2.);
  
         double bar = gsl_rng_uniform(rnw);
     
@@ -6870,7 +5470,7 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
         if (prob <= bar || isnan(prob)) {
           acceptance[nw] = 0;
         } else {
-          xisq0[nw] = xisq;
+          neg2loglike0[nw] = neg2loglike;
         } 
   
       }
@@ -6894,16 +5494,24 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
       fclose(sout);
     }
 
-    MPI_Allgather(&p0local[nwinit*pperwalker], pperwalker*npercore, MPI_DOUBLE, p0global, pperwalker*npercore, MPI_DOUBLE, MPI_COMM_WORLD);
-    MPI_Gather(&acceptance[nwinit], 1*npercore, MPI_INT, acceptanceglobal, 1*npercore, MPI_INT, 0, MPI_COMM_WORLD); 
-    MPI_Gather(&xisq0[nwinit], 1*npercore, MPI_DOUBLE, xisq0global, 1*npercore, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    int nread;
+    if (nwfin-nwalkers > 0) {
+      nread = nwalkers-nwinit;
+      if (nread < 0) nread = 0;
+    } else {
+      nread = npercore;
+    }
+
+    MPI_Allgather(&p0local[nwinit*pperwalker], pperwalker*nread, MPI_DOUBLE, p0global, pperwalker*nread, MPI_DOUBLE, MPI_COMM_WORLD);
+    MPI_Gather(&acceptance[nwinit], 1*nread, MPI_INT, acceptanceglobal, 1*nread, MPI_INT, 0, MPI_COMM_WORLD); 
+    MPI_Gather(&neg2loglike0[nwinit], 1*nread, MPI_DOUBLE, neg2loglike0global, 1*nread, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
     memcpy(p0local, p0global, totalparams*sofd);
 
     int nwdex;
     if (RANK == 0) {
       memcpy(acceptance, acceptanceglobal, nwalkers*sofi);
-      memcpy(xisq0, xisq0global, nwalkers*sofd);
+      memcpy(neg2loglike0, neg2loglike0global, nwalkers*sofd);
 
       long naccept = 0;
       for (nwdex=0; nwdex<nwalkers; nwdex++) naccept += acceptance[nwdex];
@@ -6926,7 +5534,7 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
       }
 
       // print out occasionally
-      if (jj % 100 == 0) { 
+      if (jj % OUTPUTINTERVAL == 0) { 
         char outfilestr[80];
         strcpy(outfilestr, "demcmc_");
         strcat(outfilestr, OUTSTR);
@@ -6972,17 +5580,17 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
               fprintf(outfile, "%.15lf ; rvcelerite \n", p0local[nwdex*pperwalker+npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+i]);
             }
           }
-          fprintf(outfile, "; chisq = %18.11lf, %i, %li\n", xisq0[nwdex], nwdex, jj);  
+          fprintf(outfile, "; neg2loglike = %18.11lf, %i, %li\n", neg2loglike0[nwdex], nwdex, jj);  
         }
         fclose(outfile);
       }
 
       FILE *outfile2;
       for (nwdex=0; nwdex<nwalkers; nwdex++) {
-        if (xisq0[nwdex] < xisqmin) {
-          xisqmin = xisq0[nwdex];
+        if (neg2loglike0[nwdex] < neg2loglikemin) {
+          neg2loglikemin = neg2loglike0[nwdex];
           sout = fopen("demcmc.stdout", "a");
-          fprintf(sout, "Chain %lu has Best xisq so far: %lf\n", nwdex, xisq0[nwdex]);
+          fprintf(sout, "Chain %lu has Best neg2loglike so far: %lf\n", nwdex, neg2loglike0[nwdex]);
           fclose(sout);
           char outfile2str[80];
           strcpy(outfile2str, "mcmc_bestchisq_");
@@ -6990,11 +5598,7 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
           strcat(outfile2str, ".aei");
           outfile2 = fopen(outfile2str, "a");
           fprintf(outfile2, "planet         period (d)               T0 (d)                  e                   i (deg)                 Omega (deg)               omega(deg)               mp (mjup)              rpors           ");
-          if (MULTISTAR) {
-            fprintf(outfile2, "brightness               c1                    c2\n");
-          } else {
-            fprintf(outfile2, "\n");
-          }
+          fprintf(outfile2, "\n");
           char ch = 'a';
           double pnum = 0.1;
           int ip;
@@ -7018,11 +5622,6 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
             fprintf(outfile2, "\t%18.15lf", atan2( p0local[nwdex*pperwalker+ip*pperplan+3] , p0local[nwdex*pperwalker+ip*pperplan+2] ) * 180./M_PI);
             for (ii=6; ii<8; ii++) {
               fprintf(outfile2, "\t%.15lf", p0local[nwdex*pperwalker+ip*pperplan+ii]); 
-            }
-            if (MULTISTAR) {
-              for (ii=8; ii<11; ii++) {
-                fprintf(outfile2, "\t%.15lf", p0local[nwdex*pperwalker+ip*pperplan+ii]);
-              }
             }
             fprintf(outfile2, "\n");
           }
@@ -7052,7 +5651,7 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
             }
           }
           fprintf(outfile2, " ; Comments: These coordinates are jacobian (see Lee & Peale 2003).   gen = %li   ch=%li\n", jj, nwdex);
-          fprintf(outfile2, " ; chisq = %.15lf\n", xisq0[nwdex]);
+          fprintf(outfile2, " ; neg2loglike = %.15lf\n", neg2loglike0[nwdex]);
           fclose(outfile2);
         }
       }
@@ -7083,7 +5682,7 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
   free(p0local);
   free(p0global);
   free(p0localcopy);
-  free(xisq0global);
+  free(neg2loglike0global);
 
 
   for(i=0; i<nwalkers; i++) {
@@ -7096,15 +5695,14 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
   }
   free(p0);
 
-  free(xisq0);
+  free(neg2loglike0);
 
 #elif (demcmc_compile == 3)
 
   int i;
   double ***int_in = dsetup2(p, npl);
   double ***flux_rvs; 
-  if (MULTISTAR) flux_rvs = dpintegrator_multi(int_in, tfe, tve, cadencelist);
-  else flux_rvs = dpintegrator_single(int_in, tfe, tve, nte, cadencelist);
+  flux_rvs = dpintegrator_single(int_in, tfe, tve, nte, cadencelist);
   free(int_in[0][0]);
   free(int_in[0]);
   free(int_in[1][0]);
@@ -7234,7 +5832,7 @@ int main (int argc, char *argv[]) {
   }
   free(RVFARR);
   free(PARFIX); free(PSTEP); free(SSTEP); free(STEP); free(BIMODLIST); free(OUTSTR); free(RVARR);
-  free(MAXDENSITY); free(EMAX); free(EPRIORV);
+  free(MAXDENSITY); free(EMAX); free(EPRIORV); free(MASSPRIORCENTERS); free(MASSPRIORSIGMAS);
 
   free(XYZLIST);
 
