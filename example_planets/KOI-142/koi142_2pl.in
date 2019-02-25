@@ -28,8 +28,8 @@ int rvjitterdata= 0 0 0
 // Is there TTV measurement and uncertainty files to read in along with the photometry? (1=yes, 0=no)
 // These files must be called ttv_[0-9].txt
 int ttvchisq= 0
-// Should a TTV jitter term be included? If yes (1), then how many bodies have TTVS, and how many different observational TTV
-//  data sets are there per star
+// Should a TTV jitter term be included? If yes (1), then how many stars have TTVs (should be 1) and how many data TTV 
+//   data sets are there per star (only 1 is allowed currently). Thus this line should be 0 0 0 (no jitter) or 1 1 1 (yes jitter).
 int ttvjitterdata= 0 0 0 
 // Should we use Celerite for the lightcurve? 1 = yes, 0 = no, if yes, 4 more free parameters must be specificed after all RV+TTV jitter terms
 //    These terms are lightcurve jitter, S0, w0, and Q as defined in the celerite paper.  
