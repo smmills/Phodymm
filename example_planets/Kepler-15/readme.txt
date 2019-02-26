@@ -1,6 +1,6 @@
 A model of a 1-planet system using a mix of long and short cadence data, and RVs from 2 different sources. 
  - RV data taken from Endl et al. 2011 (http://iopscience.iop.org/article/10.1088/0067-0049/197/1/13/pdf) 
- - Photometric data must be uncompressed with $ tar -xvf kplr011359879_1440_2.tar.gz
+ - Photometric data must be uncompressed with $ tar -xvf kplr011359879_1440_2.txt.tar.gz
 
 # Single Forward Model
 
