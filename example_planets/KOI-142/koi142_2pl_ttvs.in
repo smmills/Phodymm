@@ -60,7 +60,7 @@ int mgt0= 1
 // If yes, you must list the maximum allowed density (g/cm^3) you want for each planet, otherwise the line will be ignored (but must be present)
 int densitycuton= 0
 0 0 
-// Do you wanto enforce a Gaussian mass ratio prior on the planets (1=yes, 2=no)
+// Do you wanto enforce a Gaussian mass ratio prior on the planets (1=yes, 0=no)
 // If yes, the following line specifies first the center of the prior for each planets, and the next the uncertainty (sigma) of the Gaussian
 // Thus each each line should have Nplanet entries, and both lines must be present even if a mass prior is not used (but will be ignored) 
 int massprior= 0

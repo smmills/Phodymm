@@ -1,5 +1,5 @@
 #define demcmc_compile 0
-#define celerite_compile 0
+#define celerite_compile 1
 
 // To compile lcout:
 // make sure demcmc_compile is defined as 0
@@ -1927,6 +1927,11 @@ int getinput(char fname[]) {
   fgets(buffer, 1000, inputf);
   fgets(buffer, 1000, inputf);
   fscanf(inputf, "%s %s %i", type, varname, &MASSPRIOR); fgets(buffer, 1000, inputf);
+  if (!((MASSPRIOR == 0) || (MASSPRIOR == 1))) {
+    printf("Error: MASSPRIOR = %i\n", MASSPRIOR);
+    printf("       Massprior must be 0 or 1\n");
+    exit(0); 
+  }
   if (MASSPRIOR) { 
     for (i=0; i<npl; i++) fscanf(inputf, "%lf", &MASSPRIORCENTERS[i]); fgets(buffer, 1000, inputf); 
     for (i=0; i<npl; i++) fscanf(inputf, "%lf", &MASSPRIORSIGMAS[i]); fgets(buffer, 1000, inputf); 
