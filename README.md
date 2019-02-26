@@ -139,7 +139,7 @@ This file is read in by the C code and must be in the exact format as the exampl
    ```
    [Planet Label] \t  [x] \t [y] \t [z] \t [v_x] \t [v_y] \t [v_z] \t [Mass] \t [Rp/Rstar]
    ```
-   where the units are AU and AU/day. If any of these options are selected, xyzlist must be set to 1 for each planet.
+   where the units are AU and AU/day. If any of these options are selected, xyzlist must be set to 1 for each planet. An example of usage with a cartesian coordinate style initial conditions instead of the usual orbital elements is found in `example_planets/Kepler-18/` indicated with filenames containing `cartesian`. 
 
    You can also choose xyzflag= 5 or xyzflag= 6 to enter elements in a-e-i basis:
    ```
@@ -151,7 +151,7 @@ This file is read in by the C code and must be in the exact format as the exampl
    ```
    [Planet Label] \t  [period (d)] \t [T0 (d)] \t [sqrt(e)\*cos(omega)] \t [sqrt(e)\*sin(omega)] \t [i (deg)] \t [Omega (deg)] \t [Mass] \t [Rp/Rstar]
    ```
-   although this may vary depending on your setup in the .in file. 
+   although this may vary depending on your setup in the .in file. This is useful for using draws from the posterior (demcmc_NAME.out) as initial conditions. Use in this manner is seen in the example posterior TTV cloud script described below (`make_ttv_posterior_cloud.sh`). 
 
 
 4. [Optional] Radial Velocity Dataset

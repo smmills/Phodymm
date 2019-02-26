@@ -15,6 +15,8 @@ Then run the `lightcurve_runscript.sh` script to generate
 
 The scripts in example_planets/analysis_tools can then be copied to this directory to produce some quick diagnostic plots 
 
+This directory also contains an example of using (x, y, z, vx, vy, vz) as an input basis instead of orbital elements. It will produce identical output as the equivalent orbital element initial conditions. It can be run with `lightcurve_runscript_cartesian.sh`', which points to the associated `*cartesian*` files.
+
 
 # DEMCMC Model Fit
 

@@ -1,5 +1,5 @@
 #define demcmc_compile 0
-#define celerite_compile 1
+#define celerite_compile 0
 
 // To compile lcout:
 // make sure demcmc_compile is defined as 0
@@ -2481,16 +2481,16 @@ double ***dsetup2 (double *p, const int npl){
   // jacobian
   double *sum;
   if (XYZFLAG==1) {
-    sum=calloc(6,sofd);
-    if(XYZLIST[0]) {
-      int j;
-      for (j=0; j<6; j++) state[0][j] = p[j];
+    for (i=0; i<npl; i++) {
+      if(XYZLIST[i]) {
+        int j;
+        for (j=0; j<6; j++) state[i][j] = p[i*pperplan+j];
+      }
     }
-    free(sum);
   }
 
 #if (demcmc_compile == 0) 
-  if (CONVERT) {
+  if (CONVERT && (XYZFLAG != 2) && (XYZFLAG != 3)) {
     char outfile2str[80];
     strcpy(outfile2str, "xyz_out_");
     strcat(outfile2str, OUTSTR);
@@ -2536,6 +2536,7 @@ double ***dsetup2 (double *p, const int npl){
       }
     }
     fprintf(outfile2, " ; These coordinates are Jacobian \n");
+    fprintf(outfile2, " ; Tepoch = %0.15lf\n", PRINTEPOCH);
 
     fclose(outfile2);
   }
@@ -2563,8 +2564,8 @@ double ***dsetup2 (double *p, const int npl){
 
   //barycentric
   if (XYZFLAG==3) {
-    //printf("barycentric coordinate input is broken at the moment. try using stellar centric instead.\n");
-    //exit(0);
+    printf("barycentric coordinate input is broken at the moment. Try using stellar centric (xyzflag=2) instead.\n");
+    exit(0);
     double *starpos = calloc(6,sofd);
     int j;
     for (j=0; j<6; j++) {
@@ -2626,7 +2627,28 @@ double ***dsetup2 (double *p, const int npl){
     fprintf(outfile2, "%.15lf ; c1\n", c1);
     fprintf(outfile2, "%.15lf ; c2\n", c2);
     fprintf(outfile2, "%.15lf ; dilute\n", dilute);
+    if (RVJITTERFLAG) {
+      for (i=0; i<RVJITTERTOT; i++) {
+        fprintf(outfile2, "%.15lf ; rvjitter \n", p[npl*pperplan+5+i]);
+      }
+    }
+    if (TTVJITTERFLAG) {
+      for (i=0; i<TTVJITTERTOT; i++) {
+        fprintf(outfile2, "%.15lf ; rvjitter \n", p[npl*pperplan+5+RVJITTERTOT+i]);
+      }
+    }
+    if (CELERITE) {
+      for (i=0; i<NCELERITE; i++) {
+        fprintf(outfile2, "%.15lf ; celerite \n", p[npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+i]);
+      }
+    }
+    if (RVCELERITE) {
+      for (i=0; i<NRVCELERITE; i++) {
+        fprintf(outfile2, "%.15lf ; RV celerite \n", p[npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+i]);
+      }
+    }
     fprintf(outfile2, " ; These coordinates are stellar centric\n");
+    fprintf(outfile2, " ; Tepoch = %0.15lf\n", PRINTEPOCH);
 
     fclose(outfile2);
   }
@@ -2683,7 +2705,28 @@ double ***dsetup2 (double *p, const int npl){
     fprintf(outfile2, "%.15lf ; c1\n", c1);
     fprintf(outfile2, "%.15lf ; c2\n", c2);
     fprintf(outfile2, "%.15lf ; dilute\n", dilute);
+    if (RVJITTERFLAG) {
+      for (i=0; i<RVJITTERTOT; i++) {
+        fprintf(outfile2, "%.15lf ; rvjitter \n", p[npl*pperplan+5+i]);
+      }
+    }
+    if (TTVJITTERFLAG) {
+      for (i=0; i<TTVJITTERTOT; i++) {
+        fprintf(outfile2, "%.15lf ; rvjitter \n", p[npl*pperplan+5+RVJITTERTOT+i]);
+      }
+    }
+    if (CELERITE) {
+      for (i=0; i<NCELERITE; i++) {
+        fprintf(outfile2, "%.15lf ; celerite \n", p[npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+i]);
+      }
+    }
+    if (RVCELERITE) {
+      for (i=0; i<NRVCELERITE; i++) {
+        fprintf(outfile2, "%.15lf ; RV celerite \n", p[npl*pperplan+5+RVJITTERTOT+TTVJITTERTOT+NCELERITE*CELERITE+i]);
+      }
+    }
     fprintf(outfile2, " ; These coordinates are barycentric\n");
+    fprintf(outfile2, " ; Tepoch = %0.15lf\n", PRINTEPOCH);
 
     free(bary);
     fclose(outfile2);
@@ -4478,7 +4521,67 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
 //    }
 //  }
 
-  neg2loglike += compute_priors(p, 0);
+  if (XYZFLAG != 0) {
+    // generate p in normal format 
+    // compute priors
+    int i, j;
+    double **aeiparam  = malloc(npl*sofds);
+    double **orbparam  = malloc(npl*sofds);
+    double masstot[npl+1]; 
+    double stateorig[npl][6];
+    masstot[0] = int_in[2][0][0];
+    for (i=0; i<npl; i++) {
+      masstot[i+1] = masstot[i];
+      masstot[i+1] += int_in[2][i+1][0];
+    }
+
+    for (j=0; j<6; j++) {
+      stateorig[0][j] = -int_in[2][1][j+1];
+    }
+    double *sum = calloc(6,sofd);
+    for (i=1; i<npl; i++){
+      for (j=0; j<6; j++) {
+        sum[j] += int_in[2][i][j+1]*int_in[2][i][0]/masstot[i];
+        stateorig[i][j] = -(int_in[2][i+1][j+1] - sum[j]);
+      }
+    }
+    free(sum);
+    
+    for (i=0; i<npl; i++) {
+      aeiparam[i] = statetokep(stateorig[i][0], stateorig[i][1], stateorig[i][2], stateorig[i][3], stateorig[i][4], stateorig[i][5], masstot[i+1]); 
+      orbparam[i] = keptoorb(aeiparam[i][0], aeiparam[i][1], aeiparam[i][2], aeiparam[i][3], aeiparam[i][4], aeiparam[i][5], masstot[i+1]);
+    }
+    double *ptemp = malloc((npl*pperplan + pstar)*sofd); 
+    for (i=0; i<npl; i++) {
+      ptemp[i*pperplan+0] = orbparam[i][0];
+      ptemp[i*pperplan+1] = orbparam[i][1];
+      if (SQRTE) {
+        ptemp[i*pperplan+2] = sqrt(orbparam[i][2]) * cos(orbparam[i][5]);
+        ptemp[i*pperplan+3] = sqrt(orbparam[i][2]) * sin(orbparam[i][5]);
+      } else {
+        ptemp[i*pperplan+2] = orbparam[i][2] * cos(orbparam[i][5]);
+        ptemp[i*pperplan+3] = orbparam[i][2] * sin(orbparam[i][5]);
+      }
+      ptemp[i*pperplan+4] = orbparam[i][3];
+      ptemp[i*pperplan+5] = orbparam[i][4];
+      ptemp[i*pperplan+6] = p[i*pperplan+6];
+      ptemp[i*pperplan+7] = p[i*pperplan+7];
+    } 
+    for (i=0; i<pstar; i++) {
+      ptemp[npl*pperplan+i] = p[npl*pperplan+i];
+    }      
+    
+    for (i=0; i<npl; i++) free(aeiparam[i]);
+    free(aeiparam);
+    for (i=0; i<npl; i++) free(orbparam[i]);
+    free(orbparam);
+ 
+    neg2loglike += compute_priors(ptemp, 0);
+    free(ptemp);
+
+  } else {
+    neg2loglike += compute_priors(p, 0);
+  }
 
   printf("post priors:\n");
   printf("neg2loglike=%lf\n", neg2loglike);
