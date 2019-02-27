@@ -229,6 +229,12 @@ int dbleq (double a, double b) {
 }
 
 
+typedef struct
+{	double	x0,y0;
+	double	r;
+} circle;
+
+
 // Find the greater of two values
 int compare (const void* a, const void* b) {
 
@@ -3588,14 +3594,36 @@ double ***dpintegrator_multi(double ***int_in, double **tfe, double **tve, int *
   free(whereplanets);
 
 
-  double onetlc (int nplanets, double **rxy, double rstar, double c1, double c2); // prototype 
+  double onetlc (int nplanets, circle *system, double rstar, double c1, double c2);// proto {
+  //double onetlc (int nplanets, double **rxy, double rstar, double c1, double c2); // prototype 
 
   for (k=0; k<brights; k++) {
     int k1 = brightsindex[k];
     long kk1;
     for (kk1=0; kk1<kk; kk1++) {
-      if (k==0) fluxlist[k][kk1] = onetlc(numplanets[k][kk1], tranarray[k][kk1], 1.0*rstar*RSUNAU, c1list[k1], c2list[k1]);
-      else fluxlist[k][kk1] = onetlc(numplanets[k][kk1], tranarray[k][kk1], rad[k1-1]*rstar*RSUNAU, c1list[k1], c2list[k1]);
+      if (k==0) {
+        circle central = {0.,0., 1.};
+        circle system[numplanets[k][kk1]+1];
+        system[0] = central;
+        double rcentral = 1.0*rstar*RSUNAU;
+        for (i=0; i<numplanets[k][kk1]; i++) {
+          system[i+1].x0 = tranarray[k][kk1][i][1]/rcentral;
+          system[i+1].y0 = tranarray[k][kk1][i][2]/rcentral;
+          system[i+1].r = tranarray[k][kk1][i][0]/rcentral;
+        } 
+        fluxlist[k][kk1] = onetlc(numplanets[k][kk1], system, rcentral, c1list[k1], c2list[k1]);
+      } else {
+        circle central = {0.,0., 1.};
+        circle system[numplanets[k][kk1]+1];
+        system[0] = central;
+        double rcentral = rad[k1-1]*rstar*RSUNAU;
+        for (i=0; i<numplanets[k][kk1]; i++) {
+          system[i+1].x0 = tranarray[k][kk1][i][1]/rcentral;
+          system[i+1].y0 = tranarray[k][kk1][i][2]/rcentral;
+          system[i+1].r = tranarray[k][kk1][i][0]/rcentral;
+        } 
+        fluxlist[k][kk1] = onetlc(numplanets[k][kk1], system, rcentral, c1list[k1], c2list[k1]);
+      }
     }
   }
 
@@ -4869,10 +4897,6 @@ double *devoerr (double **tmte) {
 ////// These routines are from Pal 2008
 //// from icirc.c
 ////
-typedef struct
-{	double	x0,y0;
-	double	r;
-} circle;
 
 typedef struct
 {	int	cidx;
