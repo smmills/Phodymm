@@ -33,9 +33,10 @@ The `-lm` `-lgsl` and `-lgslcblas` flags should link the compiler to your math l
 
 This generates an executable called `lcout` (short for light-curve output).
 You may use it to run a forward N-body model given a data file, input file, and initial conditions file.
->>>>>>> nomulti
 The output will be a theoretical lightcurve and list of transit times.  
 For an example, see the readme.txt in `example_planets/Kepler-36`
+
+This is the multi-star version of the code, allowing for multiple bright bodies (stars or planets, they are not distinguished). However, this code is Newtonian only, and therefore if tidal effects or General Relativity is important, the code will not produce realistic numerical integrations. All bodies are also assumed to be spherical (no tidal distortion). An example circumbinary fit is given in `example_planets/Kepler-35`. 
 
 ## Fitting to Data to Generate Posteriors
 
