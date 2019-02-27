@@ -15,8 +15,7 @@ Then run the `lightcurve_runscript.sh` script to generate
 # DEMCMC Model Fit
 
 To run a DEMCMC, compile the demcmc executable (directions in README.md), and copy it to this directory.
-Depending on your computing setup, you might then run runscript.sh (if you are already on the machine you wish to run the MCMC on)
-or demcmc.sbatch (in order to submit your job to a slurm queue). 
+Depending on your computing setup, you might then run $ ./demcmc_runscript.sh (if you are already on the machine you wish to run the MCMC on) or submit demcmc.sbatch (in order to submit your job to a slurm queue). If you run demcmc_runscript.sh, you will likely want to use screen or nohup, as an MCMC process will often take a very long time.  
 
 This will generate the file with the state of the MCMC chain every 100 generations which can be used for generating posteriors, as well as several other output files as described in README.md MCMC Fit Output Files section.  
 
@@ -24,5 +23,3 @@ To restart a DEMCMC that has been stopped or crashed, the helper script `restart
 $ ./restart.sh demcmc_runscript.sh kepler36_longcadence.in 
 will generate several restart files ending in `.res` (see the Optional Input section in README.md) and a script called demcmc_runscript.sh.res.sh, which can be run to restart the MCMC from where it left off 
 
-
- 
