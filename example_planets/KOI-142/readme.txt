@@ -39,11 +39,10 @@ However, since there are non-transiting planets in this example, before running 
 # DEMCMC Model Fit
 
 To run a DEMCMC, compile the demcmc executable (directions in README.md), and copy it to this directory.
-Depending on your computing setup, you might then run runscript.sh (if you are already on the machine you wish to run the MCMC on)
-or demcmc.sbatch (in order to submit your job to a slurm queue).
+Depending on your computing setup, you might then run $ ./demcmc_runscript.sh (if you are already on the machine you wish to run the MCMC on) or submit demcmc.sbatch (in order to submit your job to a slurm queue). If you run demcmc_runscript.sh, you will likely want to use screen or nohup, as an MCMC process will often take a very long time.  
 To select which model to run in the demcmc, uncomment the appropriate model in demcmc_runscript.sh 
 
-This will generate the file with the state of the MCMC chain every 100 generations which can be used for generating posteriors, as well as several other output files as described in README.md MCMC Fit Output Files section.  
+This will generate the file with the state of the MCMC chain every 100 generations which can be used for generating posteriors, as well as several other output files as described in README.md MCMC Fit Output Files section. If you run demcmc_runscript.sh a sub-directory called outf will be created, with diagnostic output from each thread's initialization stored in it, useful for de-bugging. The file demcmc.stdout will track the progress of the MCMC.  
 
 To restart a DEMCMC that has been stopped or crashed, the helper script `restart.sh` is included in the `example_planets/restart_script` directory. After a DEMCMC is run for at least 100 generations (generating all necessary output files) copy it here and run:
 $ ./restart.sh demcmc_runscript.sh koi142_MODELNAME.in 
