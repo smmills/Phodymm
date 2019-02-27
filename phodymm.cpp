@@ -3627,6 +3627,12 @@ double ***dpintegrator_multi(double ***int_in, double **tfe, double **tve, int *
     }
   }
 
+  printf("brights=%i\n", brights); 
+  printf("fluxlist[0][0]=%lf\n", fluxlist[0][0]);
+  printf("fluxlist[0][1]=%lf\n", fluxlist[0][1]);
+  printf("fluxlist[1][0]=%lf\n", fluxlist[1][0]);
+  printf("fluxlist[1][1]=%lf\n", fluxlist[1][1]);
+
   double omdilute = 1.0-dilute;
   long kk1;
   for (kk1=0; kk1<kk; kk1++) {
@@ -3907,8 +3913,8 @@ int getinput(char fname[]) {
   fscanf(inputf, "%s %s %i", type, varname, &MULTISTAR); fgets(buffer, 1000, inputf); 
 
   if (MULTISTAR) {
-    printf("WARNING!\n");
-    printf("Multiple-stars are disabled in this version of the code\n");
+    printf("Multistar = %i\n", MULTISTAR);
+    printf("Multiple-stars are enabled in this version of the code\n");
   }
   if (MULTISTAR) PPERPLAN = 11;
   else PPERPLAN = 8; 
@@ -3918,8 +3924,8 @@ int getinput(char fname[]) {
   fgets(buffer, 1000, inputf);
   fscanf(inputf, "%s %s %i %i %i", type, varname, &RVJITTERFLAG, &NSTARSRV, &NTELESCOPES); fgets(buffer, 1000, inputf);
   printf("rvjitterflag, NstarsRV, Ntelescopes =  %i, %i, %i\n", RVJITTERFLAG, NSTARSRV, NTELESCOPES);
-  if (RVJITTERFLAG && NSTARSRV > 1) {
-    printf("Error: Multiple-stars are disabled in this version of the code, but you set NSTARSRV=%i\n", NSTARSRV);
+  if (RVJITTERFLAG && NSTARSRV > 1 && MULTISTAR==0) {
+    printf("Error: Multiple-stars are turned off, but you set NSTARSRV=%i\n", NSTARSRV);
     exit(0);
   }
   if (RVJITTERFLAG && (NSTARSRV < 0 || NTELESCOPES < 1)) {
@@ -4528,7 +4534,17 @@ double ***dsetup2 (double *p, const int npl){
   double brightstar=0;
   double bsum=0;
   int i;
-
+  if (MULTISTAR) {
+    for (i=0; i<npl; i++) bsum+=p[i*pperplan+8];
+    brightstar=1.0-bsum;
+    if (brightstar <= 0.) {
+      printf("Central star has zero or negative brightness. Input must be incorrect (ds2)\n");
+      exit(0);
+    }
+  }
+  printf("brightstar=%lf\n", brightstar);
+  printf("PPERPLAN=%i\n", PPERPLAN);
+  
   double ms = p[npl*pperplan+0];
   double rstar = p[npl*pperplan+1];
   double c1 = p[npl*pperplan+2];
@@ -4631,6 +4647,7 @@ double ***dsetup2 (double *p, const int npl){
     strcat(outfile2str, ".pldin");
     FILE *outfile2 = fopen(outfile2str, "a");
     fprintf(outfile2, "planet                 x                        y                      z                      v_x                   v_y                   v_z                       m                      rpors             ");
+    if (MULTISTAR) fprintf(outfile2, "brightness               c1                    c2");
     fprintf(outfile2, "\n");
     double pnum = 0.1;
     for (i=0; i<NPL; i++) {
@@ -4641,6 +4658,11 @@ double ***dsetup2 (double *p, const int npl){
       }
       fprintf(outfile2, "\t%.15lf", mpjup[i]/jos);
       fprintf(outfile2, "\t%.15lf", p[i*pperplan+7]);
+      if (MULTISTAR) {
+        for (j=8; j<11; j++) {
+          fprintf(outfile2, "\t%.15lf", p[i*pperplan+j]);
+        }
+      }
       fprintf(outfile2, "\n");
       pnum+=0.1;
     }
@@ -4742,6 +4764,7 @@ double ***dsetup2 (double *p, const int npl){
     strcat(outfile2str, ".pldin");
     FILE *outfile2 = fopen(outfile2str, "a");
     fprintf(outfile2, "planet                 x                        y                      z                      v_x                   v_y                   v_z                       m                      rpors             ");
+    if (MULTISTAR) fprintf(outfile2, "brightness               c1                    c2");
     fprintf(outfile2, "\n");
     double pnum = 0.1;
     for (i=0; i<NPL; i++) {
@@ -4752,6 +4775,11 @@ double ***dsetup2 (double *p, const int npl){
       }
       fprintf(outfile2, "\t%.15lf", mpjup[i]/jos);
       fprintf(outfile2, "\t%.15lf", p[i*pperplan+7]);
+      if (MULTISTAR) {
+        for (j=8; j<11; j++) {
+          fprintf(outfile2, "\t%.15lf", p[i*pperplan+j]);
+        }
+      }
       fprintf(outfile2, "\n");
       pnum+=0.1;
     }
@@ -4787,6 +4815,7 @@ double ***dsetup2 (double *p, const int npl){
     strcat(outfile2str, ".pldin");
     FILE *outfile2 = fopen(outfile2str, "a");
     fprintf(outfile2, "planet                 x                        y                      z                      v_x                   v_y                   v_z                       m                      rpors             ");
+    if (MULTISTAR) fprintf(outfile2, "brightness               c1                    c2");
     fprintf(outfile2, "\n");
     double pnum = 0.0;
 
@@ -4798,8 +4827,8 @@ double ***dsetup2 (double *p, const int npl){
     fprintf(outfile2, "\t%.15lf", 1.0);
     fprintf(outfile2, "\t%.15lf", brightstar);
     fprintf(outfile2, "\t%.15lf", c1);
-    fprintf(outfile2, "\t%.15lf\n", c2);
-
+    fprintf(outfile2, "\t%.15lf", c2);
+    fprintf(outfile2, "\n");
     pnum+=0.1;
     for (i=0; i<NPL; i++) {
       fprintf(outfile2, "%1.1lf", pnum);
@@ -4809,6 +4838,11 @@ double ***dsetup2 (double *p, const int npl){
       }
       fprintf(outfile2, "\t%.15lf", mpjup[i]/jos);
       fprintf(outfile2, "\t%.15lf", p[i*pperplan+7]);
+      if (MULTISTAR) {
+        for (j=8; j<11; j++) {
+          fprintf(outfile2, "\t%.15lf", p[i*pperplan+j]);
+        }
+      }
       fprintf(outfile2, "\n");
       pnum+=0.1;
     }
@@ -4843,21 +4877,38 @@ double ***dsetup2 (double *p, const int npl){
   integration_in[2][0][5] = 0.;
   integration_in[2][0][6] = 0.;
   integration_in[2][0][7] = 1.;
+  if (MULTISTAR) {
+    integration_in[2][0][8] = brightstar;
+    integration_in[2][0][9] = c1;
+    integration_in[2][0][10] = c2;
+  }
   for (i=0; i<npl; i++) {
     integration_in[2][i+1][0] = bigg*mpjup[i];
     int j;
     for (j=0; j<6; j++) {
       integration_in[2][i+1][j+1] = statenew[i][j];
     }
-    integration_in[2][i+1][7] = p[i*pperplan+7]; 
+    integration_in[2][i+1][7] = p[i*pperplan+7];
+    if (MULTISTAR) {
+      for (j=8; j<11; j++) {
+        integration_in[2][i+1][j] = p[i*pperplan+j];
+      }
+    } 
   }
   integration_in[3] = malloc(sofds);
-  integration_in[3][0] = malloc(4*sofd);
+  if (!MULTISTAR) {
+    integration_in[3][0] = malloc(4*sofd);
+  } else {
+    integration_in[3][0] = malloc(2*sofd);
+  }
   integration_in[3][0][0] = rstar;
-  integration_in[3][0][1] = c1;
-  integration_in[3][0][2] = c2;
-  integration_in[3][0][3] = dilute;
-
+  if (!MULTISTAR) {
+    integration_in[3][0][1] = c1;
+    integration_in[3][0][2] = c2;
+    integration_in[3][0][3] = dilute;
+  } else {
+    integration_in[3][0][1] = dilute;
+  }
 
 
 
@@ -5635,8 +5686,6 @@ double *timedlc ( double *times, int *cadences, long ntimes, double **transitarr
         j=jj;
       }
       fluxlist[ntimes-1] = onetlc (nplanets, system, rstarau, c1, c2);
-
-
     } else {
       for (n=0; n<ntimes-1; n++) {
         t_cur = times[n];
@@ -5888,6 +5937,11 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
     double *brightness1;
     double *c1bin1;
     double *c2bin1;
+    if (MULTISTAR) {
+      brightness1 = malloc(npl*sofd);
+      c1bin1 = malloc(npl*sofd);
+      c2bin1 = malloc(npl*sofd);
+    }
     double *celeriteps = malloc(4*sofd);
     double *rvceleriteps = malloc(4*sofd);
     double ms;
@@ -5908,13 +5962,16 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
   
     FILE *aeifile = fopen(aei, "r");
     if (aeifile == NULL) {
-      printf("Bad pldin Input File Name");
+      printf("Bad pldin Input File Name\n");
       exit(0);
     }
-  
+ 
+    printf("npl=%i\n", npl);
+ 
     fgets(buffer, 1000, aeifile);
     for (i=0; i<npl; i++) {
       fscanf(aeifile,"%lf %lf %lf %lf %lf %lf %lf %lf %lf", &planet1[i], &period1[i], &t01[i], &e1[i], &inc1[i], &bo1[i], &lo1[i], &mp1[i], &rpors1[i]);
+      printf("%lf\n", planet1[i]);
       printf("%lf\n", period1[i]);
       p[i*pperplan+0] = period1[i];
       p[i*pperplan+1] = t01[i];
@@ -5943,6 +6000,14 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
       }
       p[i*pperplan+6] = mp1[i];
       p[i*pperplan+7] = rpors1[i];
+      printf("here1\n");
+      if (MULTISTAR) {
+        fscanf(aeifile, "%lf %lf %lf", &brightness1[i], &c1bin1[i], &c2bin1[i]);
+        p[i*pperplan+8] = brightness1[i];
+        p[i*pperplan+9] = c1bin1[i];
+        p[i*pperplan+10] = c2bin1[i]; 
+      }
+      printf("here2\n");
       fgets(buffer, 1000, aeifile); // This line usually unnecessarily advances the file pointer to a new line. 
                                     // Unless  you are not multistar and but have too many inputs. It then  saves you from bad read-ins 
     }
@@ -6067,6 +6132,9 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
     fclose(aeifile);
 
     free(planet1); free(period1); free(t01); free (e1); free(inc1); free(bo1); free(lo1); free(mp1); free(rpors1); free(celeriteps); free(rvceleriteps); 
+    if (MULTISTAR) {
+      free(brightness1); free(c1bin1); free(c2bin1);
+    }
     if (RVJITTERFLAG) {
       free(jittersize);
     }
@@ -6487,7 +6555,6 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
   } else {
     flux_rvs = dpintegrator_single(int_in, tfe, tve, nte, cadencelist);
   }
-  flux_rvs = dpintegrator_single(int_in, tfe, tve, nte, cadencelist);
   printf("Integration Complete\n");
   
   double **ttvts = flux_rvs[2];
@@ -6607,6 +6674,7 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
     strcat(outfile2str, ".pldin");
     FILE *outfile2 = fopen(outfile2str, "a");
     fprintf(outfile2, "planet         period (d)               T0 (d)                  e                   i (deg)                 Omega (deg)               omega(deg)               mp (mjup)              rpors           ");
+    if (MULTISTAR) fprintf(outfile2, "brightness               c1                    c2");
     fprintf(outfile2, "\n");
     char ch = 'a';
     double pnum = 0.1;
@@ -6622,7 +6690,7 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
       fprintf(outfile2, "\t%.15lf", orbparam[ip][3]*180.0/M_PI);
       fprintf(outfile2, "\t%.15lf", orbparam[ip][4]*180.0/M_PI);
       fprintf(outfile2, "\t%.15lf", orbparam[ip][5]*180.0/M_PI);
-      for (ii=6; ii<8; ii++) {
+      for (ii=6; ii<PPERPLAN; ii++) {
         fprintf(outfile2, "\t%.15lf", p[ip*pperplan+ii]); 
       }
       fprintf(outfile2, "\n");
@@ -6683,7 +6751,7 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
       }
       fprintf(outfile2, "\t%.15lf", orbparam[ip][3]*180.0/M_PI);
       fprintf(outfile2, "\t%.15lf", orbparam[ip][4]*180.0/M_PI);
-      for (ii=6; ii<8; ii++) {
+      for (ii=6; ii<PPERPLAN; ii++) {
         fprintf(outfile2, "\t%.15lf", p[ip*pperplan+ii]); 
       }
       fprintf(outfile2, "\n");
@@ -6736,7 +6804,7 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
       fprintf(outfile2, "\t%.15lf", aeiparam[ip][3]*180.0/M_PI);
       fprintf(outfile2, "\t%.15lf", aeiparam[ip][4]*180.0/M_PI);
       fprintf(outfile2, "\t%.15lf", aeiparam[ip][5]*180.0/M_PI);
-      for (ii=6; ii<8; ii++) {
+      for (ii=6; ii<PPERPLAN; ii++) {
         fprintf(outfile2, "\t%.15lf", p[ip*pperplan+ii]); 
       }
       fprintf(outfile2, "\n");
@@ -7037,7 +7105,9 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
         double ***nint_in = dsetup2(&p0local[nw*pperwalker], npl);
   
         double ***nflux_rvs; 
-        nflux_rvs = dpintegrator_single(nint_in, tfe, tve, nte, cadencelist);
+        //nflux_rvs = dpintegrator_single(nint_in, tfe, tve, nte, cadencelist);
+        if (MULTISTAR) nflux_rvs = dpintegrator_multi(nint_in, tfe, tve, cadencelist);
+        else nflux_rvs = dpintegrator_single(nint_in, tfe, tve, nte, cadencelist);
         double **nttvts = nflux_rvs[2];
         double **nflux = nflux_rvs[0];
         double **nradvs = nflux_rvs[1];
@@ -7298,7 +7368,7 @@ int demcmc(char aei[], char chainres[], char bsqres[], char gres[]) {
               fprintf(outfile2, "\t%.15lf", p0local[nwdex*pperwalker+ip*pperplan+ii]); 
             }
             fprintf(outfile2, "\t%18.15lf", atan2( p0local[nwdex*pperwalker+ip*pperplan+3] , p0local[nwdex*pperwalker+ip*pperplan+2] ) * 180./M_PI);
-            for (ii=6; ii<8; ii++) {
+            for (ii=6; ii<PPERPLAN; ii++) {
               fprintf(outfile2, "\t%.15lf", p0local[nwdex*pperwalker+ip*pperplan+ii]); 
             }
             fprintf(outfile2, "\n");
