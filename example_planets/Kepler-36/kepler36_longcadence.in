@@ -132,7 +132,7 @@ double offsetmult= 3.0
 double offsetmin= 3.0
 double offsetminout= 3.0
 double dist2divisor= 3.0
-// Time for lcout to print osculating elements besides Tepoch 
+// Time for lcout to print planet positions besides Tepoch 
 double printepoch= 850.0
 // Are any planet initial conditions given in (x y z vx vy vz) or any other non-standard style rather than orbital elements, 0=no, 1=yes,Jacobian, 2=yes,Stellar-Centric, 3=yes,Barycentric, 4=mcmcout form, 5=aei not pt0, 6=mean/true anomaly
 int xyzflag= 0
