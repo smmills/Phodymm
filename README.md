@@ -1,5 +1,9 @@
 # Phodymm
 
+## Attribution
+
+This code is free to use, but please cite Mills (2017) "Detecting and Interpreting the Dynamical Evolution of Transiting Multiplanet Systems", PhD Thesis, University of Chicago, 10605897 <https://search.proquest.com/docview/1957414878> if you use the multi_star version of this code. 
+
 ## Requirements
 
 This code requires: 
