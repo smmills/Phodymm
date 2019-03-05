@@ -3924,10 +3924,6 @@ int getinput(char fname[]) {
   fgets(buffer, 1000, inputf);
   fscanf(inputf, "%s %s %i %i %i", type, varname, &RVJITTERFLAG, &NSTARSRV, &NTELESCOPES); fgets(buffer, 1000, inputf);
   printf("rvjitterflag, NstarsRV, Ntelescopes =  %i, %i, %i\n", RVJITTERFLAG, NSTARSRV, NTELESCOPES);
-  if (RVJITTERFLAG && NSTARSRV > 1 && MULTISTAR==0) {
-    printf("Error: Multiple-stars are turned off, but you set NSTARSRV=%i\n", NSTARSRV);
-    exit(0);
-  }
   if (RVJITTERFLAG && (NSTARSRV < 0 || NTELESCOPES < 1)) {
     printf("Error, invalid RV jitter parameter.\n");
     exit(0);

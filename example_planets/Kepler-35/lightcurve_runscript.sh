@@ -1,4 +1,5 @@
 #!/bin/bash 
  
-./lcout kepler18.in kep35.pldin 
+./lcout kepler35.in kep35.pldin 
+
 
