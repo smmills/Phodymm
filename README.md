@@ -2,7 +2,9 @@
 
 ## Attribution
 
-This code is free to use and modify, but please cite Mills, Fabrycky, Migaszewski, Ford, Petigura, and Isaacson (2016) Nature, 533, 509-512 (available at <https://www.nature.com/articles/nature17445>) if you use it.
+This code is free to use and modify, but please cite Mills, Fabrycky, Migaszewski, Ford, Petigura, and Isaacson (2016) Nature, 533, 509-512 (available at <https://www.nature.com/articles/nature17445>) if you use it. 
+
+See also <https://github.com/smmills/Phodymm/tree/multi_star> for the multiple star version of the code (alpha version). 
 
 ## Requirements
 
