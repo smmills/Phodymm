@@ -1,6 +1,8 @@
 #define demcmc_compile 0
 #define celerite_compile 1
 
+// This code written in C by Sean M Mills
+
 // To compile lcout:
 // make sure demcmc_compile is defined as 0
 // Compile with:
