@@ -112,7 +112,7 @@ int bimodlist=
 // Integration start time (days)
 double t0= 50.0
 // Integration stop time (days)
-double t1= 3520.0 
+double t1= 3720.0 
 // Interval (in generations) at which to save state of chains
 int outputinterval= 100
 // Pseudo random number generator seed
