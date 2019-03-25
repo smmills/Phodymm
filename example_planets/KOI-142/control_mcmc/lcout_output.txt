@@ -1,0 +1,42 @@
+[lweiss@cadence control_mcmc]$ ./lightcurve_runscript_3pl_rvs.sh
+cadenceswitch = 2
+pperplan=8
+rvjitterflag, NstarsRV, Ntelescopes =  1, 1, 2
+celerite=0
+RVcelerite=0
+pstar=7
+spectroscopy = 1, 0.998000, 0.030000, 0.030000
+MASS spectroscopy = 1, 0.921000, 0.013000, 0.013000
+LDLAW = 0
+sqrte, ecuton, eprior[0], esigma = 1, 1, 0, 0.050000
+bimodf = 0
+t0 = 50.000000
+t1 = 3720.000000
+10.916594
+22.264337
+1438.563870
+./kplr005446285_1440_2.txt
+
+./kplr005446285_1440_2.txt read
+pre RV
+0, 1
+1, 0
+2, 0
+3, 0
+vv=52
+Sanity check:
+p[][2]=10.916594, orbelemets[2]=10.916594
+int_in 4.000000, 54.627020, 0.920139, 0.000024
+starting integration.
+t=54.627020 tepoch=54.627020 t1=3720.000000 t0=50.000000 h=0.000010
+RE starting integration.
+t=54.627020 tepoch=54.627020 t1=3720.000000 t0=50.000000 h=-0.000010
+Integration Complete
+kk=1564429
+pre rvjitter:
+neg2loglike=1564172.613669
+post ttvjitter:
+neg2loglike=1564310.802739
+post priors:
+neg2loglike=1564304.751832
+Total run time = 5.807701652000 secs
