@@ -2543,7 +2543,6 @@ double ***dsetup2 (double *p, const int npl){
       }
     }
     fprintf(outfile2, " ; These coordinates are Jacobian \n");
-    fprintf(outfile2, " ; Tepoch = %0.15lf\n", PRINTEPOCH);
 
     fclose(outfile2);
   }
@@ -2655,7 +2654,6 @@ double ***dsetup2 (double *p, const int npl){
       }
     }
     fprintf(outfile2, " ; These coordinates are stellar centric\n");
-    fprintf(outfile2, " ; Tepoch = %0.15lf\n", PRINTEPOCH);
 
     fclose(outfile2);
   }
@@ -2733,7 +2731,6 @@ double ***dsetup2 (double *p, const int npl){
       }
     }
     fprintf(outfile2, " ; These coordinates are barycentric\n");
-    fprintf(outfile2, " ; Tepoch = %0.15lf\n", PRINTEPOCH);
 
     free(bary);
     fclose(outfile2);
