@@ -10,7 +10,7 @@ string outstr= koi142_3pl_rvs
 // Number of bodies in the simulation (including all stars)
 int nbodies= 4
 // Epoch time of inputs
-double epoch= 800.0
+double epoch= 54.62702
 // Number of individual demcmc walkers
 long nwalkers= 40
 // Number of generations the demcmc will run (i.e. the number of steps per walker)
@@ -134,7 +134,7 @@ double offsetmult= 3.0
 double offsetmin= 3.0
 double offsetminout= 3.0
 double dist2divisor= 3.0
-// Time for lcout to print planet positions besides Tepoch 
+// Time for lcout to print osculating elements besides Tepoch 
 double printepoch= 800.0
 // Are any planet initial conditions given in (x y z vx vy vz) or any other non-standard style rather than orbital elements, 0=no, 1=yes,Jacobian, 2=yes,Stellar-Centric, 3=yes,Barycentric, 4=mcmcout form, 5=aei not pt0, 6=mean/true anomaly
 int xyzflag= 0

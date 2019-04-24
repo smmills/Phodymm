@@ -6,11 +6,11 @@
 // Frequently edited parameters
 //
 // Run name / identifier (must contain no spaces)
-string outstr= koi142_3pl_rvs_xyz
+string outstr= koi142_3pl_rvs_id_test
 // Number of bodies in the simulation (including all stars)
 int nbodies= 4
 // Epoch time of inputs
-double epoch= 800.0
+double epoch= 54.62702
 // Number of individual demcmc walkers
 long nwalkers= 40
 // Number of generations the demcmc will run (i.e. the number of steps per walker)
@@ -112,7 +112,7 @@ int bimodlist=
 // Integration start time (days)
 double t0= 50.0
 // Integration stop time (days)
-double t1= 3720.0 
+double t1= 3520.0 
 // Interval (in generations) at which to save state of chains
 int outputinterval= 100
 // Pseudo random number generator seed
@@ -137,9 +137,9 @@ double dist2divisor= 3.0
 // Time for lcout to print osculating elements besides Tepoch 
 double printepoch= 800.0
 // Are any planet initial conditions given in (x y z vx vy vz) or any other non-standard style rather than orbital elements, 0=no, 1=yes,Jacobian, 2=yes,Stellar-Centric, 3=yes,Barycentric, 4=mcmcout form, 5=aei not pt0, 6=mean/true anomaly
-int xyzflag= 2
+int xyzflag= 0
 // Which planet inputs are in x y z vx vy vz style (1 indicates xyz, 0 indicates orbital elements)
-int xyzlist= 1 1 1
+int xyzlist= 0 0 0
 // Initial guess at step size for planet parameters
 // Format: double pstep= P_step T0_step ecosomega_step esinomega_step inclination_step Omega_step mass_step rpors_step [brightness_step c1_step c2_step]
 double pstep= 1e-7      1e-7   1e-6    1e-6    1e-5    1e-5    1e-5    1e-5
