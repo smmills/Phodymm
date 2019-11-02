@@ -1,6 +1,6 @@
 A model of a 3-planet system with long-cadence photometry from K2, transit timing variation measurements from other sources, and mass priors from RVs. 
 - Some TTV data taken from Narita et al. 2015 
-- RV/TTV from CPS (Petigura et al. 2019)
+- RV/TTV from Petigura et al. 2019 (https://arxiv.org/abs/1910.12899)
 
 
 # Single Forward Model
