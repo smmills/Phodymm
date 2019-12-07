@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import glob
 
+pdict = {0:'b',1:'c',2:'d'}
 colorlist = ['b', 'r', 'g', 'y', 'c', 'm', 'midnightblue', 'yellow'] 
 
 lcdatafile = glob.glob("./lc_*.lcout") 
@@ -19,7 +20,7 @@ meas = lcdata[:,1]
 the = lcdata[:,2]
 err = lcdata[:,3]
 
-tbvfilelist = glob.glob("./tbv[0-9][0-9]_[0-9][0-9].out")
+tbvfilelist = sorted(glob.glob("./tbv[0-9][0-9]_[0-9][0-9].out"))
 nfiles = len(tbvfilelist)
 npl = nfiles
 
@@ -46,29 +47,36 @@ phasewidth = [0.4 for i in range(nfiles)]
 for i in range(nfiles):
   if len(transtimes[i]) > 1:
     meanper, const = np.linalg.lstsq(np.vstack([nums[i], np.ones(len(nums[i]))]).T, transtimes[i], rcond=None)[0] 
+    print("Deatils for planet %s:\n\tNumber of transits=%i\n\tMean period=%f days"%(pdict.get(i),len(nums[i]),meanper))
     # 3x the duration of an edge-on planet around the sun
-    phasewidth[i] = 3.*(13./24.) * ((meanper/365.25)**(1./3.)) 
-collisionwidth = [pwi for pwi in phasewidth] #0.15
+    phasewidth[i] = min(3.*(13./24.) * ((meanper/365.25)**(1./3.)) ,1) # not too wide
+collisionwidth = [pwi for pwi in phasewidth] 
+#collisionwidth = 0.15*np.ones(nfiles)
 
 for i in range(nfiles):
   phases = []
   fluxes = []
+  model_fluxes = []
   othertts = transtimes[:i] + transtimes[i+1:]
   if len(othertts) > 0:
     othertts = np.hstack(np.array(othertts))
   thistts = np.array(transtimes[i])
+  print(len(thistts))
   for tti in thistts:
     if len(othertts) == 0:
       trange = np.where(np.abs(time - tti) < phasewidth[i])[0]
       phases.append(time[trange] - tti)
       fluxes.append(meas[trange])
+      model_fluxes.append(the[trange])
     elif min(abs(othertts - tti)) > collisionwidth[i]: 
       trange = np.where(np.abs(time - tti) < phasewidth[i])[0]
       phases.append(time[trange] - tti)
       fluxes.append(meas[trange])
+      model_fluxes.append(the[trange])
   phases = np.hstack(phases)
   fluxes = np.hstack(fluxes)
-  axes[i].scatter(phases, fluxes, s=0.01, c='gray', alpha=0.5)
+  model_fluxes = np.hstack(model_fluxes)
+  axes[i].scatter(phases, fluxes, s=0.01, c='gray', alpha=0.5,rasterized=True,zorder=1)
  
   binwidth = 1./1440. * 10.
   nbins = int(2*phasewidth[i] / binwidth)
@@ -78,6 +86,7 @@ for i in range(nfiles):
   phasesort = np.argsort(phases)
   phases = phases[phasesort]
   fluxes = fluxes[phasesort]
+  model_fluxes = model_fluxes[phasesort]
 
   j=0
   k=0
@@ -95,12 +104,16 @@ for i in range(nfiles):
     if k >= nbins:
       break
 
-  axes[i].scatter(bincenters, mbinned, s=1.0, c='k') 
+  axes[i].scatter(bincenters, mbinned, s=2.0, c='k',label='binned',zorder=3) 
+  axes[i].plot(phases, model_fluxes, c='blue',label='model '+str(pdict.get(i)),zorder=2,lw=1,rasterized=True)
   axes[i].set_xlim((-phasewidth[i], phasewidth[i]))
-  axes[i].set_ylim((min(fluxes), max(fluxes)))
+  axes[i].set_ylabel('Normalized Flux')
+  try:
+      axes[i].set_ylim((min(fluxes), max(fluxes)))
+  except:
+      pass
+  axes[i].legend()
 
 plt.xlabel('Phase (days)')
-plt.ylabel('Normalized Flux')
 f.tight_layout()
-f.savefig('PhaseFolded.png',dpi=180,format='png')
-
+f.savefig('PhaseFolded.png',dpi=300,format='png')
