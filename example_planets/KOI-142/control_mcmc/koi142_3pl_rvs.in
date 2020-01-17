@@ -147,7 +147,7 @@ double pstep= 1e-7      1e-7   1e-6    1e-6    1e-5    1e-5    1e-5    1e-5
 // Format: double sstep= Mstar_step Rstar_step c1_step c2_step dilute_step [jitter_step(s)] [celerite_steps]
 double sstep= 1e-7      1e-6    1e-6    1e-6    1e-8  1e-4 1e-4 
 // Flag for using custom step list. 0 = regular (default), 1 = custom (must set below)
-int stepflag= 0
+int stepflag= 1
 // Initial parameter step size list for custom step list
 // Format:
 // double cstep=
@@ -157,7 +157,8 @@ int stepflag= 0
 // P_step T0_step ecosomega_step esinomega_step inclination_step Omega_step mass_step rpors_step [brightness_step c1_step c2_step]
 // Mstar_step Rstar_step c1_step c2_step
 double cstep=
-1e-7  1e-7    1e-3    1e-3    1e-4    1e-2    1e-4   1e-6
-1e-7  1.0    1e-3    1e-3    1e-4    1e-2    1e-4   1e-6
+1e-7  1e-7    1e-4    1e-4    1e-4    1e-2    1e-4   1e-6
+1e-7  1e-7    1e-4    1e-4    1e-4    1e-2    1e-4   1e-6
+1e-2  1e-1    1e-3    1e-3    1e-4    1e-2    1e-4   1e-6
 1e-4  1e-4    1e-4    1e-4    1e-4    
 //
