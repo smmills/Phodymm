@@ -14,6 +14,7 @@ import sys
 import os
 import pandas as pd
 import numpy as np
+from numpy import sin, cos, pi, arccos
 import corner
 import matplotlib.pyplot as plt
 plt.switch_backend('agg')
@@ -241,7 +242,10 @@ else:
 for i in range(npl):
   allparam['$e_%s$' % alphabet[i]] = allparam[r'$\sqrt{e}\cos \omega$$_%s$' % alphabet[i]]**2. + allparam[r'$\sqrt{e}\sin \omega$$_%s$' % alphabet[i]]**2.
 
+#for i in range(npl-1):
+#  allparam['i$_{%s%s}$' % (alphabet[i],alphabet[i+1])] = cos(allparam[r'i$_%s$' % alphabet[i]]) * cos(allparam[r'i$_%s$' % alphabet[i+1]]) + sin(allparam[r'i$_%s$' % alphabet[i]]) * sin(allparam[r'i$_%s$' % alphabet[i+1]]) * cos(allparam[r'$\Omega$$_%s$' % alphabet[i]] - allparam[r'$\Omega$$_%s' % alphabet[i+1]])
 
+allparam['i$_{bc}$'] = arccos(cos(allparam['i$_b$'] * pi/180) * cos(allparam['i$_c$'] * pi/180) + sin(allparam['i$_b$'] * pi/180) * sin(allparam['i$_c$'] * pi/180) * cos((allparam['$\Omega$$_b$'] - allparam['$\Omega$$_c$']) * pi/180)) * 180/pi                                                                                                                        
 
 mecols=[]
 for i in range(npl):
@@ -252,8 +256,7 @@ print(mecols)
 # corner plot es and ms
 mepars = allparam[mecols]
 
-ranges=[(min(mepars.iloc[:,i]), max(mepars.iloc[:,i])) for i in range(mepars.iloc[0].size)]
-ranges=[(i[0],i[0]+1) if i[0] == i[1] else i for i in ranges]
+ranges=[(min(mepars.iloc[:,i]), max(mepars.iloc[:,i])) for i in range(mepars.iloc[0].size)]ranges=[(i[0],i[0]+1) if i[0] == i[1] else i for i in ranges]
 
 figure3 = corner.corner(mepars, range=ranges)
 figure3.savefig('analysis_dir/me_'+savestr+'.png')
@@ -279,4 +282,3 @@ for p in fullplist:
       pctfile.write('%s\t%20.10f + %20.10f - %20.10f \n' %('{0: <16}'.format(p), plistp[2], plistp[4]-plistp[2], plistp[2]-plistp[0]))
     with open('analysis_dir/fits_2sigmaUpperLimits_'+savestr+'.txt', 'a') as pctfile:
       pctfile.write('%s < %20.10f \n' %('{0: <16}'.format(p), plistp[5])) 
-
