@@ -247,6 +247,8 @@ for i in range(npl):
 
 allparam['i$_{bc}$'] = arccos(cos(allparam['i$_b$'] * pi/180) * cos(allparam['i$_c$'] * pi/180) + sin(allparam['i$_b$'] * pi/180) * sin(allparam['i$_c$'] * pi/180) * cos((allparam['$\Omega$$_b$'] - allparam['$\Omega$$_c$']) * pi/180)) * 180/pi                                                                                                                        
 
+allparam.sample(1000).to_csv('analysis_dir/koi142_3pl_rvs_sample1000.csv') 
+
 mecols=[]
 for i in range(npl):
   mecols.append('M$_%s$' % alphabet[i])
