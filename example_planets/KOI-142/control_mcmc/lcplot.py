@@ -1,19 +1,45 @@
 ### Edit this range to plot a different segment of data
-trange = [800,850]
+trange = [1312,1335] # for publication
+# trange = [160,190] # to inspect feature at 200 days
 #
 
 import numpy as np
 import matplotlib.pyplot as plt
 import glob
 
+pdict = {0:'b',1:'c',2:'d'}
 colorlist = ['b', 'r', 'g', 'y', 'c', 'm', 'midnightblue', 'yellow'] 
+
+
+tbvfilelist = sorted(glob.glob("./tbv[0-9][0-9]_[0-9][0-9].out"))
+nfiles = len(tbvfilelist)
+npl = nfiles
+transittimes = [[] for i in range(npl)]
+nums = [[] for i in range(npl)]
+for i in range(nfiles):
+  data = np.loadtxt(tbvfilelist[i])
+  tt = data[:,1]
+  transittimes[i] = tt 
+  nn = data[:,0]
+  nums[i] = nn    
+phasewidth = [0.4 for i in range(nfiles)]
+for i in range(nfiles):
+  if len(transittimes[i]) > 1:
+    meanper, const = np.linalg.lstsq(np.vstack([nums[i], np.ones(len(nums[i]))]).T, transittimes[i], rcond=None)[0] 
+    print("Deatils for planet %s:\n\tNumber of transits=%i\n\tMean period=%f days"%(pdict.get(i),len(nums[i]),meanper))
+    # 3x the duration of an edge-on planet around the sun
+    phasewidth[i] = min(3.*(13./24.) * ((meanper/365.25)**(1./3.)) ,1) # not too wide
+collisionwidth = [pwi for pwi in phasewidth] 
+#collisionwidth = 0.15*np.ones(nfiles)
+  
+
 
 def plotlc(time, meas, the, err, trange, outputname=None, autoadjust=True):
 
   f = plt.figure()
   f, (a0, a1) = plt.subplots(2,1, gridspec_kw = {'height_ratios':[3, 1]})
-  a0.scatter(time, meas, s=0.1, c='k') 
-  a0.plot(time, the, marker="None", c=colorlist[0])
+  a0.scatter(time, meas, s=0.1, c='k',rasterized=True) 
+  a0.plot(time, the, marker="None", c=colorlist[0],rasterized=True)
   
   a1.scatter(time, meas-the, s=0.1, c='k')
   #a1.errorbar(time, meas, yerr=err, marker="None", linestyle="None", c='k')
@@ -43,12 +69,12 @@ def plotlc(time, meas, the, err, trange, outputname=None, autoadjust=True):
   yspan = ylim[1]-ylim[0]
   
   i=0 
-  for fname in glob.glob("./tbv[0-9][0-9]_[0-9][0-9].out"):
+  for fname in sorted(glob.glob("./tbv[0-9][0-9]_[0-9][0-9].out")):
     i+=1
     data = np.loadtxt(fname)
     tt = data[:,1]
     for tti in tt:
-      a0.plot([tti, tti], [ylim-0.05*yspan, ylim], c=colorlist[i], marker="None") 
+      a0.plot([tti, tti], [ylim-0.05*yspan, ylim], c=colorlist[i], marker="None",rasterized=True) 
   
   plt.xlabel('Time (days)')
   plt.tight_layout()
@@ -76,11 +102,21 @@ time = lcdata[:,0]
 meas = lcdata[:,1]
 the = lcdata[:,2]
 err = lcdata[:,3]
-
 ####
+#plotlc(time, meas, the, err, [50., 1570.], outputname='AllData')
+for planet_num, planet in enumerate(transittimes):
+  print("Planet:", planet)
+  if planet_num >= 2:
+    for transit_time in planet:
+      print("transit_time:", transit_time)
+      if (transit_time < max(time)) and (transit_time > min(time)):
+        trange = [transit_time - collisionwidth[planet_num], transit_time + collisionwidth[planet_num]]
+        if planet_num==2:
+          trange=[1335-48,1335+48]
+        inrange = np.where((time > trange[0]) & (time < trange[1]))[0]
+        if len(inrange) > 0:
+          plotlc(time[inrange], meas[inrange], the[inrange], err[inrange], trange, outputname='zoom'+str(planet_num)+'_'+"{:04d}".format(int(transit_time)), autoadjust=False)
 
-plotlc(time, meas, the, err, [50., 1570.], outputname='AllData')
-plotlc(time, meas, the, err, trange, outputname='zoom', autoadjust=True)
 
 
 
